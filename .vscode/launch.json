@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Prompt Evals App",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/apps/prompt-evals-app/src/prompt_evals_app/entry_point.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env"
+    }
+  ]
+}

@@ -1,0 +1,118 @@
+{
+  "trial": {
+    "variant_name": "robust-tables-first",
+    "case_name": "june-august-2026",
+    "repetition_number": 3
+  },
+  "extracted_facts": {
+    "dining_june_total": "212.74",
+    "dining_july_total": "165.14",
+    "dining_august_total": "398.69",
+    "dining_august_budget_status": "over",
+    "shopping_july_total": "756.72",
+    "refund_treatment": "netted_against_spending",
+    "duplicate_flagged": "true",
+    "both_delta_charges_kept": "true",
+    "travel_august_total": "1631.82",
+    "uncategorized_entry_count": "8",
+    "largest_july_to_august_increase_category": "Travel"
+  },
+  "check_outcomes": [
+    {
+      "check_name": "dining-june-total",
+      "check_status": "passed",
+      "reason": "reported 212.74; expected 212.74",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-july-total",
+      "check_status": "passed",
+      "reason": "reported 165.14; expected 165.14",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-august-total",
+      "check_status": "passed",
+      "reason": "reported 398.69; expected 398.69",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-august-over-budget",
+      "check_status": "passed",
+      "reason": "reported over; expected over",
+      "diagnoses": []
+    },
+    {
+      "check_name": "refund-netted",
+      "check_status": "passed",
+      "reason": "reported netted_against_spending; expected netted_against_spending",
+      "diagnoses": []
+    },
+    {
+      "check_name": "shopping-july-total",
+      "check_status": "passed",
+      "reason": "reported 756.72; expected 756.72",
+      "diagnoses": []
+    },
+    {
+      "check_name": "duplicate-flagged",
+      "check_status": "passed",
+      "reason": "reported true; expected true",
+      "diagnoses": []
+    },
+    {
+      "check_name": "both-delta-charges-kept",
+      "check_status": "passed",
+      "reason": "reported true; expected true",
+      "diagnoses": []
+    },
+    {
+      "check_name": "travel-august-total",
+      "check_status": "passed",
+      "reason": "reported 1631.82; expected 1655.92 or 1631.82",
+      "diagnoses": []
+    },
+    {
+      "check_name": "uncategorized-entry-count",
+      "check_status": "passed",
+      "reason": "reported 8; expected 8",
+      "diagnoses": []
+    },
+    {
+      "check_name": "largest-increase-is-travel",
+      "check_status": "passed",
+      "reason": "reported Travel; expected travel",
+      "diagnoses": []
+    },
+    {
+      "check_name": "code-executed",
+      "check_status": "passed",
+      "reason": "5 successful of 5 shell calls matching '\\bpython' (5 shell calls in total)",
+      "diagnoses": []
+    },
+    {
+      "check_name": "ambiguous-entries-not-forced",
+      "check_status": "passed",
+      "reason": "All eight entries appear in a separate \"Uncategorized (cash/transfers)\" group, excluded from the budgets. Each is listed with the correct amount and a note that its purpose is unknown, and the answer warns the restaurant and shopping budgets may be understated.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "tables-before-interpretation",
+      "check_status": "passed",
+      "reason": "After a brief framing line (\"All figures below come from analyze.py\"), the answer presents the monthly totals by category table and the budget comparison table first. The interpretation (\"Three things you should know\") comes only afterward, following the data-cleaning notes.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "three-supported-findings",
+      "check_status": "passed",
+      "reason": "The answer gives exactly three findings. Its figures match the reference under the books-in-Shopping, Uber-as-transport policy: dining 212.74/165.14/398.69, shopping 1,020.77/756.72/1,218.31 (August $18.31 over), travel 1,631.82 in August only, and total 11,758.68. The supporting arithmetic (57% grocery rise, $3,744.63 August ex-trip, $2,867.75 June–July average) agrees with its own tables.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "no-invented-budgets",
+      "check_status": "passed",
+      "reason": "The answer compares only Eating Out & Coffee ($260) and Shopping ($1,200) against targets. It says groceries are \"not budgeted\" and describes growth in groceries, gas and travel without calling them over or under a budget. It invents no other targets.",
+      "diagnoses": []
+    }
+  ]
+}

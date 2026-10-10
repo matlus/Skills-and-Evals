@@ -1,0 +1,164 @@
+{
+  "trial": {
+    "variant_name": "robust",
+    "case_name": "june-august-2026",
+    "repetition_number": 1
+  },
+  "extracted_facts": {
+    "dining_june_total": "212.74",
+    "dining_july_total": "165.14",
+    "dining_august_total": "398.69",
+    "dining_august_budget_status": "over",
+    "shopping_july_total": "756.72",
+    "refund_treatment": "netted_against_spending",
+    "duplicate_flagged": "true",
+    "both_delta_charges_kept": "false",
+    "travel_august_total": "1181.22",
+    "uncategorized_entry_count": "8",
+    "largest_july_to_august_increase_category": "Travel"
+  },
+  "check_outcomes": [
+    {
+      "check_name": "dining-june-total",
+      "check_status": "passed",
+      "reason": "reported 212.74; expected 212.74",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-july-total",
+      "check_status": "passed",
+      "reason": "reported 165.14; expected 165.14",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-august-total",
+      "check_status": "passed",
+      "reason": "reported 398.69; expected 398.69",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-august-over-budget",
+      "check_status": "passed",
+      "reason": "reported over; expected over",
+      "diagnoses": []
+    },
+    {
+      "check_name": "refund-netted",
+      "check_status": "passed",
+      "reason": "reported netted_against_spending; expected netted_against_spending",
+      "diagnoses": []
+    },
+    {
+      "check_name": "shopping-july-total",
+      "check_status": "passed",
+      "reason": "reported 756.72; expected 756.72",
+      "diagnoses": []
+    },
+    {
+      "check_name": "duplicate-flagged",
+      "check_status": "passed",
+      "reason": "reported true; expected true",
+      "diagnoses": []
+    },
+    {
+      "check_name": "both-delta-charges-kept",
+      "check_status": "failed",
+      "reason": "reported false; expected true",
+      "diagnoses": []
+    },
+    {
+      "check_name": "travel-august-total",
+      "check_status": "failed",
+      "reason": "reported 1181.22; expected 1655.92 or 1631.82",
+      "diagnoses": [
+        {
+          "category": "Travel",
+          "period": "2026-08",
+          "reported_amount": "1181.22",
+          "reference_amount": "1631.82",
+          "accepted_policies": [
+            "August 16 Uber in Transport"
+          ],
+          "cause": "Travel 2026-08: reported 1,181.22, reference 1,631.82 (under the accepted policy 'August 16 Uber in Transport'), a difference of -450.60. Explained by: left out line 168 \"Delta Air Lines (8/14) - $450.60\" (-450.60).",
+          "explanations": [
+            [
+              {
+                "line_number": 168,
+                "source_text": "Delta Air Lines (8/14) - $450.60",
+                "mistake": "left_out",
+                "amount_effect": "-450.60",
+                "reference_category": "Travel",
+                "reference_period": "2026-08"
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "check_name": "uncategorized-entry-count",
+      "check_status": "passed",
+      "reason": "reported 8; expected 8",
+      "diagnoses": []
+    },
+    {
+      "check_name": "largest-increase-is-travel",
+      "check_status": "passed",
+      "reason": "reported Travel; expected travel",
+      "diagnoses": []
+    },
+    {
+      "check_name": "code-executed",
+      "check_status": "passed",
+      "reason": "4 successful of 8 shell calls matching '\\bpython' (9 shell calls in total)",
+      "diagnoses": []
+    },
+    {
+      "check_name": "ambiguous-entries-not-forced",
+      "check_status": "passed",
+      "reason": "The answer puts all eight entries (Zelle, ATM, Venmo - Sam, PayPal) in a separate \"Uncategorized\" group of $646.73, with the stated amounts matching the rubric. It says they have no stated purpose and lists them individually, so none sits in an ordinary spending category.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "tables-before-interpretation",
+      "check_status": "passed",
+      "reason": "The monthly category totals (section 4) and budget comparison (section 5) tables appear before the \"What I'd most want you to know\" findings at the end; earlier sections are parsing and cleaning notes, not conclusions.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "three-supported-findings",
+      "check_status": "failed",
+      "reason": "The answer's August Travel of $1,181.22 contradicts the reference $1,655.92 (or $1,631.82). It also drops a $450.60 Delta entry as a probable duplicate, which gives a cleaned total of $11,308.08 against the reference $11,758.68 or $11,812.80. Finding 1 builds on the understated Travel figure.",
+      "diagnoses": [
+        {
+          "category": "Travel",
+          "period": "2026-08",
+          "reported_amount": "1181.22",
+          "reference_amount": "1631.82",
+          "accepted_policies": [
+            "August 16 Uber in Transport"
+          ],
+          "cause": "Travel 2026-08: reported 1,181.22, reference 1,631.82 (under the accepted policy 'August 16 Uber in Transport'), a difference of -450.60. Explained by: left out line 168 \"Delta Air Lines (8/14) - $450.60\" (-450.60).",
+          "explanations": [
+            [
+              {
+                "line_number": 168,
+                "source_text": "Delta Air Lines (8/14) - $450.60",
+                "mistake": "left_out",
+                "amount_effect": "-450.60",
+                "reference_category": "Travel",
+                "reference_period": "2026-08"
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "check_name": "no-invented-budgets",
+      "check_status": "passed",
+      "reason": "The answer compares against only the $260 dining and $1,200 shopping targets, and it cites the user's $2,000 shopping worry. Other categories (Groceries, Gas, Travel, total) are described only by month-over-month changes, with no invented budget or over/under judgment.",
+      "diagnoses": []
+    }
+  ]
+}

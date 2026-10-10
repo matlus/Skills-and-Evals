@@ -1,0 +1,155 @@
+{
+  "trial": {
+    "variant_name": "robust-tables-first",
+    "case_name": "june-august-2026",
+    "repetition_number": 1
+  },
+  "extracted_facts": {
+    "dining_june_total": "212.74",
+    "dining_july_total": "165.14",
+    "dining_august_total": "398.69",
+    "dining_august_budget_status": "over",
+    "shopping_july_total": "466.89",
+    "refund_treatment": "netted_against_spending",
+    "duplicate_flagged": "true",
+    "both_delta_charges_kept": "true",
+    "travel_august_total": "1631.82",
+    "uncategorized_entry_count": "6",
+    "largest_july_to_august_increase_category": "Travel"
+  },
+  "check_outcomes": [
+    {
+      "check_name": "dining-june-total",
+      "check_status": "passed",
+      "reason": "reported 212.74; expected 212.74",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-july-total",
+      "check_status": "passed",
+      "reason": "reported 165.14; expected 165.14",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-august-total",
+      "check_status": "passed",
+      "reason": "reported 398.69; expected 398.69",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-august-over-budget",
+      "check_status": "passed",
+      "reason": "reported over; expected over",
+      "diagnoses": []
+    },
+    {
+      "check_name": "refund-netted",
+      "check_status": "passed",
+      "reason": "reported netted_against_spending; expected netted_against_spending",
+      "diagnoses": []
+    },
+    {
+      "check_name": "shopping-july-total",
+      "check_status": "failed",
+      "reason": "reported 466.89; expected 756.72",
+      "diagnoses": [
+        {
+          "category": "Shopping",
+          "period": "2026-07",
+          "reported_amount": "466.89",
+          "reference_amount": "756.72",
+          "accepted_policies": [],
+          "cause": "Shopping 2026-07: reported 466.89, reference 756.72, a difference of -289.83. Explained by: left out line 71 \"7/2/26 IKEA $92.60\" (-92.60) and left out line 74 \"- 2026-07-03 IKEA $16.89\" (-16.89) and left out line 77 \"Jul 6 | IKEA | $180.34\" (-180.34).",
+          "explanations": [
+            [
+              {
+                "line_number": 71,
+                "source_text": "7/2/26 IKEA $92.60",
+                "mistake": "left_out",
+                "amount_effect": "-92.60",
+                "reference_category": "Shopping",
+                "reference_period": "2026-07"
+              },
+              {
+                "line_number": 74,
+                "source_text": "- 2026-07-03  IKEA  $16.89",
+                "mistake": "left_out",
+                "amount_effect": "-16.89",
+                "reference_category": "Shopping",
+                "reference_period": "2026-07"
+              },
+              {
+                "line_number": 77,
+                "source_text": "Jul 6 | IKEA | $180.34",
+                "mistake": "left_out",
+                "amount_effect": "-180.34",
+                "reference_category": "Shopping",
+                "reference_period": "2026-07"
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "check_name": "duplicate-flagged",
+      "check_status": "passed",
+      "reason": "reported true; expected true",
+      "diagnoses": []
+    },
+    {
+      "check_name": "both-delta-charges-kept",
+      "check_status": "passed",
+      "reason": "reported true; expected true",
+      "diagnoses": []
+    },
+    {
+      "check_name": "travel-august-total",
+      "check_status": "passed",
+      "reason": "reported 1631.82; expected 1655.92 or 1631.82",
+      "diagnoses": []
+    },
+    {
+      "check_name": "uncategorized-entry-count",
+      "check_status": "failed",
+      "reason": "reported 6; expected 8",
+      "diagnoses": []
+    },
+    {
+      "check_name": "largest-increase-is-travel",
+      "check_status": "passed",
+      "reason": "reported Travel; expected travel",
+      "diagnoses": []
+    },
+    {
+      "check_name": "code-executed",
+      "check_status": "passed",
+      "reason": "3 successful of 3 shell calls matching '\\bpython' (3 shell calls in total)",
+      "diagnoses": []
+    },
+    {
+      "check_name": "ambiguous-entries-not-forced",
+      "check_status": "passed",
+      "reason": "The answer puts the Zelle, PayPal and ATM entries ($102.66, $100.00, $30.79, $120.00, $69.90, $79.84) in an \"Uncategorized\" group and says the log doesn't show their purpose. The two Venmo - Sam payments ($68.54, $75.00) go in a separate \"Peer payments\" group, which works like a transfers group. That group is outside the budgets and isn't a spending category, though the answer doesn't call its purpose unknown.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "tables-before-interpretation",
+      "check_status": "passed",
+      "reason": "The answer opens with a one-line framing header and then the monthly category totals table, followed by the budget comparison table. The data-cleaning notes and the \"Three things to know\" findings come only after both tables.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "three-supported-findings",
+      "check_status": "passed",
+      "reason": "The answer gives exactly three findings. Dining ($212.74, $165.14, $398.69, over only in August), Shopping+Home ($1,020.77, $756.72, $1,218.31, $18.31 over in August) and Travel ($1,631.82) all match the reference policy. The $11,758.68 total also matches, and the August increase of $2,810.41 is consistent with its own tables.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "no-invented-budgets",
+      "check_status": "passed",
+      "reason": "The answer compares only eating out against $260 and shopping (+Home) against $1,200, and refers to the user's $2,000 worry. It explicitly says travel has no target and does not judge other categories over or under a budget.",
+      "diagnoses": []
+    }
+  ]
+}

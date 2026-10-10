@@ -1,0 +1,137 @@
+{
+  "eval_suite_name": "expense-analysis",
+  "prompt_variants": [
+    { "variant_name": "standard", "prompt_file": "prompts/standard.md" },
+    { "variant_name": "robust", "prompt_file": "prompts/robust.md" },
+    { "variant_name": "robust-tables-first", "prompt_file": "prompts/robust_tables_first.md" }
+  ],
+  "gated_variant_names": ["robust-tables-first"],
+  "trial_tool_kinds": ["shell", "read_file", "write_file", "edit_file", "find_files", "search_file_contents"],
+  "cases": [
+    {
+      "case_name": "june-august-2026",
+      "inputs_directory": "cases/june_august_2026/inputs",
+      "expected_facts_file": "cases/june_august_2026/expected_facts.json",
+      "reference_ledger_file": "cases/june_august_2026/reference_ledger.json"
+    }
+  ],
+  "fact_extraction": {
+    "instructions_file": "grading/fact_extraction_instructions.md",
+    "json_schema_file": "grading/fact_extraction_schema.json"
+  },
+  "checks": [
+    {
+      "check_name": "dining-june-total",
+      "grader": "amount",
+      "fact_name": "dining_june_total",
+      "minimum_pass_rate": 0.8,
+      "description": "June dining & coffee total is $212.74."
+    },
+    {
+      "check_name": "dining-july-total",
+      "grader": "amount",
+      "fact_name": "dining_july_total",
+      "minimum_pass_rate": 0.8,
+      "description": "July dining & coffee total is $165.14."
+    },
+    {
+      "check_name": "dining-august-total",
+      "grader": "amount",
+      "fact_name": "dining_august_total",
+      "minimum_pass_rate": 0.8,
+      "description": "August dining & coffee total is $398.69."
+    },
+    {
+      "check_name": "dining-august-over-budget",
+      "grader": "fact_value",
+      "fact_name": "dining_august_budget_status",
+      "minimum_pass_rate": 0.8,
+      "description": "August dining is reported as over the $260 target."
+    },
+    {
+      "check_name": "refund-netted",
+      "grader": "fact_value",
+      "fact_name": "refund_treatment",
+      "minimum_pass_rate": 0.8,
+      "description": "The -$68.00 REI refund reduces spending instead of adding to it."
+    },
+    {
+      "check_name": "shopping-july-total",
+      "grader": "amount",
+      "fact_name": "shopping_july_total",
+      "minimum_pass_rate": 0.8,
+      "description": "July shopping is $756.72, which is only true when the refund is netted."
+    },
+    {
+      "check_name": "duplicate-flagged",
+      "grader": "fact_value",
+      "fact_name": "duplicate_flagged",
+      "minimum_pass_rate": 0.8,
+      "description": "The repeated Trader Joe's $54.12 entry on July 22 is flagged as a likely duplicate."
+    },
+    {
+      "check_name": "both-delta-charges-kept",
+      "grader": "fact_value",
+      "fact_name": "both_delta_charges_kept",
+      "minimum_pass_rate": 0.8,
+      "description": "Both Delta charges ($412.60 and $450.60) are counted; neither is mistaken for a duplicate."
+    },
+    {
+      "check_name": "travel-august-total",
+      "grader": "amount",
+      "fact_name": "travel_august_total",
+      "minimum_pass_rate": 0.8,
+      "description": "August travel is $1,655.92 (or $1,631.82 if the 8/16 Uber stays in transport)."
+    },
+    {
+      "check_name": "uncategorized-entry-count",
+      "grader": "fact_value",
+      "fact_name": "uncategorized_entry_count",
+      "minimum_pass_rate": 0.8,
+      "description": "All eight transfers and ATM withdrawals are left uncategorized."
+    },
+    {
+      "check_name": "largest-increase-is-travel",
+      "grader": "fact_value",
+      "fact_name": "largest_july_to_august_increase_category",
+      "minimum_pass_rate": 0.8,
+      "description": "Travel is identified as the largest July-to-August increase."
+    },
+    {
+      "check_name": "code-executed",
+      "grader": "tool_use",
+      "tool_kind": "shell",
+      "tool_input_pattern": "\\bpython",
+      "minimum_pass_rate": 0.8,
+      "description": "Totals were computed by running Python, not by mental arithmetic (read from the tool-call log)."
+    },
+    {
+      "check_name": "ambiguous-entries-not-forced",
+      "grader": "judge",
+      "rubric_file": "grading/rubrics/ambiguous_entries_not_forced.md",
+      "minimum_pass_rate": 0.8,
+      "description": "Transfers and ATM withdrawals are not forced into a spending category."
+    },
+    {
+      "check_name": "tables-before-interpretation",
+      "grader": "judge",
+      "rubric_file": "grading/rubrics/tables_before_interpretation.md",
+      "minimum_pass_rate": 0.8,
+      "description": "Computed tables appear before the interpretation."
+    },
+    {
+      "check_name": "three-supported-findings",
+      "grader": "judge",
+      "rubric_file": "grading/rubrics/three_supported_findings.md",
+      "minimum_pass_rate": 0.8,
+      "description": "Exactly three findings, each supported by the numbers."
+    },
+    {
+      "check_name": "no-invented-budgets",
+      "grader": "judge",
+      "rubric_file": "grading/rubrics/no_invented_budgets.md",
+      "minimum_pass_rate": 0.8,
+      "description": "Only the two stated budget targets are used."
+    }
+  ]
+}

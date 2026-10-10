@@ -1,0 +1,118 @@
+{
+  "trial": {
+    "variant_name": "standard",
+    "case_name": "june-august-2026",
+    "repetition_number": 4
+  },
+  "extracted_facts": {
+    "dining_june_total": "212.74",
+    "dining_july_total": "165.14",
+    "dining_august_total": "398.69",
+    "dining_august_budget_status": "over",
+    "shopping_july_total": "756.72",
+    "refund_treatment": "netted_against_spending",
+    "duplicate_flagged": "true",
+    "both_delta_charges_kept": "true",
+    "travel_august_total": "1631.82",
+    "uncategorized_entry_count": null,
+    "largest_july_to_august_increase_category": "Travel"
+  },
+  "check_outcomes": [
+    {
+      "check_name": "dining-june-total",
+      "check_status": "passed",
+      "reason": "reported 212.74; expected 212.74",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-july-total",
+      "check_status": "passed",
+      "reason": "reported 165.14; expected 165.14",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-august-total",
+      "check_status": "passed",
+      "reason": "reported 398.69; expected 398.69",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-august-over-budget",
+      "check_status": "passed",
+      "reason": "reported over; expected over",
+      "diagnoses": []
+    },
+    {
+      "check_name": "refund-netted",
+      "check_status": "passed",
+      "reason": "reported netted_against_spending; expected netted_against_spending",
+      "diagnoses": []
+    },
+    {
+      "check_name": "shopping-july-total",
+      "check_status": "passed",
+      "reason": "reported 756.72; expected 756.72",
+      "diagnoses": []
+    },
+    {
+      "check_name": "duplicate-flagged",
+      "check_status": "passed",
+      "reason": "reported true; expected true",
+      "diagnoses": []
+    },
+    {
+      "check_name": "both-delta-charges-kept",
+      "check_status": "passed",
+      "reason": "reported true; expected true",
+      "diagnoses": []
+    },
+    {
+      "check_name": "travel-august-total",
+      "check_status": "passed",
+      "reason": "reported 1631.82; expected 1655.92 or 1631.82",
+      "diagnoses": []
+    },
+    {
+      "check_name": "uncategorized-entry-count",
+      "check_status": "failed",
+      "reason": "reported nothing; expected 8",
+      "diagnoses": []
+    },
+    {
+      "check_name": "largest-increase-is-travel",
+      "check_status": "passed",
+      "reason": "reported Travel; expected travel",
+      "diagnoses": []
+    },
+    {
+      "check_name": "code-executed",
+      "check_status": "passed",
+      "reason": "2 successful of 2 shell calls matching '\\bpython' (2 shell calls in total)",
+      "diagnoses": []
+    },
+    {
+      "check_name": "ambiguous-entries-not-forced",
+      "check_status": "passed",
+      "reason": "The answer groups the eight Zelle, Venmo, ATM and PayPal entries into a separate \"Transfers & Cash\" group (June $271.20, July $105.79, August $269.74, matching the rubric). It also says they have no category and may belong under dining or shopping.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "tables-before-interpretation",
+      "check_status": "passed",
+      "reason": "The monthly category table and the budget comparison tables appear before the \"three most important things\" findings. The opening is only methodology caveats (categorization choices, incomplete log), not conclusions or recommendations.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "three-supported-findings",
+      "check_status": "passed",
+      "reason": "The answer gives exactly three findings (dining spike, shopping over in August, August total with the trip). Its figures match the reference under books-in-Shopping, Steam-in-Entertainment and duplicate kept: dining $212.74/$165.14/$398.69, shopping $1,020.77/$756.72/$1,218.31 (+$18.31 over), travel $1,631.82, total $11,812.80. The percentages and claims are consistent with its own tables.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "no-invented-budgets",
+      "check_status": "passed",
+      "reason": "The answer applies budgets only to Dining & Coffee ($260/month) and Shopping ($1,200/month), and it refers to the user's $2,000 worry. The Q3 figures of $780 and $3,600 are just those two targets multiplied by three. It describes gas, groceries, travel and the other categories as growing or changing and says those increases have nothing to do with the user's budgets. It never calls them over or under a budget.",
+      "diagnoses": []
+    }
+  ]
+}

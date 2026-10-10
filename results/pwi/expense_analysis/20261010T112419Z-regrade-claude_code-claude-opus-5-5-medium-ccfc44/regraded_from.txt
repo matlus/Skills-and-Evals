@@ -1,0 +1,2 @@
+D:\Python\Skills and Evals\results\pwi\expense_analysis\20261009T201107Z-claude_code-claude-opus-5-5-medium-5237b0
+The original run folder (20261009T201107Z-claude_code-claude-opus-5-5-medium-5237b0) was removed on 2026-10-10 after this regrade; this folder holds its answers and event streams.

@@ -1,0 +1,118 @@
+{
+  "trial": {
+    "variant_name": "robust",
+    "case_name": "june-august-2026",
+    "repetition_number": 2
+  },
+  "extracted_facts": {
+    "dining_june_total": "212.74",
+    "dining_july_total": "165.14",
+    "dining_august_total": "398.69",
+    "dining_august_budget_status": "over",
+    "shopping_july_total": "756.72",
+    "refund_treatment": "netted_against_spending",
+    "duplicate_flagged": "true",
+    "both_delta_charges_kept": "true",
+    "travel_august_total": "1631.82",
+    "uncategorized_entry_count": "8",
+    "largest_july_to_august_increase_category": "Travel"
+  },
+  "check_outcomes": [
+    {
+      "check_name": "dining-june-total",
+      "check_status": "passed",
+      "reason": "reported 212.74; expected 212.74",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-july-total",
+      "check_status": "passed",
+      "reason": "reported 165.14; expected 165.14",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-august-total",
+      "check_status": "passed",
+      "reason": "reported 398.69; expected 398.69",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-august-over-budget",
+      "check_status": "passed",
+      "reason": "reported over; expected over",
+      "diagnoses": []
+    },
+    {
+      "check_name": "refund-netted",
+      "check_status": "passed",
+      "reason": "reported netted_against_spending; expected netted_against_spending",
+      "diagnoses": []
+    },
+    {
+      "check_name": "shopping-july-total",
+      "check_status": "passed",
+      "reason": "reported 756.72; expected 756.72",
+      "diagnoses": []
+    },
+    {
+      "check_name": "duplicate-flagged",
+      "check_status": "passed",
+      "reason": "reported true; expected true",
+      "diagnoses": []
+    },
+    {
+      "check_name": "both-delta-charges-kept",
+      "check_status": "passed",
+      "reason": "reported true; expected true",
+      "diagnoses": []
+    },
+    {
+      "check_name": "travel-august-total",
+      "check_status": "passed",
+      "reason": "reported 1631.82; expected 1655.92 or 1631.82",
+      "diagnoses": []
+    },
+    {
+      "check_name": "uncategorized-entry-count",
+      "check_status": "passed",
+      "reason": "reported 8; expected 8",
+      "diagnoses": []
+    },
+    {
+      "check_name": "largest-increase-is-travel",
+      "check_status": "passed",
+      "reason": "reported Travel; expected travel",
+      "diagnoses": []
+    },
+    {
+      "check_name": "code-executed",
+      "check_status": "passed",
+      "reason": "3 successful of 4 shell calls matching '\\bpython' (4 shell calls in total)",
+      "diagnoses": []
+    },
+    {
+      "check_name": "ambiguous-entries-not-forced",
+      "check_status": "passed",
+      "reason": "All eight entries are placed in an \"UNCATEGORIZED (transfer/cash)\" group and listed individually with the stated amounts. The answer says explicitly that none of them state a purpose, and it doesn't assign them to a spending category.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "tables-before-interpretation",
+      "check_status": "failed",
+      "reason": "The answer opens with summary conclusions (\"August went over both budgets\", counts of transactions) before the tables. That is a finding stated ahead of the tables, and it is more than a brief framing sentence. The tables come next, followed by the interpretation.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "three-supported-findings",
+      "check_status": "passed",
+      "reason": "The answer gives three numbered findings. Its figures match the reference under its stated policy (books in Shopping, Steam in Entertainment): Dining 212.74/165.14/398.69, Shopping 1020.77/756.72/1218.31 (August +18.31), Travel 1631.82, and a total of 11758.68. The \"Shopping is within your limit\" headline is loose, but the text immediately says August was $18.31 over, which matches the reference.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "no-invented-budgets",
+      "check_status": "passed",
+      "reason": "The answer compares against only the $260 dining and $1,200 shopping targets. It describes groceries and gas as rising and says \"these two are worth a budget number\", which doesn't invent a target or judge them over or under budget.",
+      "diagnoses": []
+    }
+  ]
+}

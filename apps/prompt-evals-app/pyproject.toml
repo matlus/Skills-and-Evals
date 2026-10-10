@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prompt-evals-app"
+version = "0.1.0"
+description = "Prompt Evals App application."
+readme = "README.md"
+requires-python = ">=3.14"
+license = "MIT"
+authors = [{ name = "Your Name", email = "your.email@example.com" }]
+dependencies = [
+    "prompt-evals",
+]
+
+[tool.uv.sources]
+prompt-evals = { workspace = true }
+
+[project.scripts]
+prompt_evals_app = "prompt_evals_app.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["prompt_evals_app*"]
+namespaces = false
+
+[tool.setuptools.package-data]
+"prompt_evals_app" = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+addopts = "-ra --strict-config --strict-markers --import-mode=importlib"
+pythonpath = ["src", "../../packages/prompt-evals/src"]

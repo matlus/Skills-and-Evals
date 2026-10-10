@@ -1,0 +1,233 @@
+{
+  "trial": {
+    "variant_name": "robust-tables-first",
+    "case_name": "june-august-2026",
+    "repetition_number": 4
+  },
+  "extracted_facts": {
+    "dining_june_total": "221.99",
+    "dining_july_total": "165.14",
+    "dining_august_total": "398.69",
+    "dining_august_budget_status": "over",
+    "shopping_july_total": "964.82",
+    "refund_treatment": "netted_against_spending",
+    "duplicate_flagged": "true",
+    "both_delta_charges_kept": "true",
+    "travel_august_total": "2194.40",
+    "uncategorized_entry_count": "8",
+    "largest_july_to_august_increase_category": "Transport / travel"
+  },
+  "check_outcomes": [
+    {
+      "check_name": "dining-june-total",
+      "check_status": "failed",
+      "reason": "reported 221.99; expected 212.74",
+      "diagnoses": [
+        {
+          "category": "Dining and coffee",
+          "period": "2026-06",
+          "reported_amount": "221.99",
+          "reference_amount": "212.74",
+          "accepted_policies": [],
+          "cause": "Dining and coffee 2026-06: reported 221.99, reference 212.74, a difference of +9.25. Explained by: counted line 55 \"6/24/26 Bowl-O-Rama 9.25\" (+9.25), which the reference puts in Entertainment.",
+          "explanations": [
+            [
+              {
+                "line_number": 55,
+                "source_text": "6/24/26 Bowl-O-Rama 9.25",
+                "mistake": "wrongly_included",
+                "amount_effect": "9.25",
+                "reference_category": "Entertainment",
+                "reference_period": "2026-06"
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "check_name": "dining-july-total",
+      "check_status": "passed",
+      "reason": "reported 165.14; expected 165.14",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-august-total",
+      "check_status": "passed",
+      "reason": "reported 398.69; expected 398.69",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-august-over-budget",
+      "check_status": "passed",
+      "reason": "reported over; expected over",
+      "diagnoses": []
+    },
+    {
+      "check_name": "refund-netted",
+      "check_status": "passed",
+      "reason": "reported netted_against_spending; expected netted_against_spending",
+      "diagnoses": []
+    },
+    {
+      "check_name": "shopping-july-total",
+      "check_status": "failed",
+      "reason": "reported 964.82; expected 756.72",
+      "diagnoses": [
+        {
+          "category": "Shopping",
+          "period": "2026-07",
+          "reported_amount": "964.82",
+          "reference_amount": "756.72",
+          "accepted_policies": [],
+          "cause": "Shopping 2026-07: reported 964.82, reference 756.72, a difference of +208.10 that no combination of up to 3 entries explains (a broader categorization difference or an arithmetic error).",
+          "explanations": []
+        }
+      ]
+    },
+    {
+      "check_name": "duplicate-flagged",
+      "check_status": "passed",
+      "reason": "reported true; expected true",
+      "diagnoses": []
+    },
+    {
+      "check_name": "both-delta-charges-kept",
+      "check_status": "passed",
+      "reason": "reported true; expected true",
+      "diagnoses": []
+    },
+    {
+      "check_name": "travel-august-total",
+      "check_status": "failed",
+      "reason": "reported 2194.40; expected 1655.92 or 1631.82",
+      "diagnoses": [
+        {
+          "category": "Travel",
+          "period": "2026-08",
+          "reported_amount": "2194.40",
+          "reference_amount": "1655.92",
+          "accepted_policies": [],
+          "cause": "Travel 2026-08: reported 2,194.40, reference 1,655.92, a difference of +538.48 that no combination of up to 3 entries explains (a broader categorization difference or an arithmetic error).",
+          "explanations": []
+        }
+      ]
+    },
+    {
+      "check_name": "uncategorized-entry-count",
+      "check_status": "passed",
+      "reason": "reported 8; expected 8",
+      "diagnoses": []
+    },
+    {
+      "check_name": "largest-increase-is-travel",
+      "check_status": "failed",
+      "reason": "reported Transport / travel; expected travel",
+      "diagnoses": []
+    },
+    {
+      "check_name": "code-executed",
+      "check_status": "passed",
+      "reason": "7 successful of 7 shell calls matching '\\bpython' (8 shell calls in total)",
+      "diagnoses": []
+    },
+    {
+      "check_name": "ambiguous-entries-not-forced",
+      "check_status": "passed",
+      "reason": "All eight entries go into a separate \"Uncategorized\" column (June $271.20, July $105.79, August $269.74, which match the rubric amounts). The notes list each one and say the log doesn't show what the funds were used for.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "tables-before-interpretation",
+      "check_status": "passed",
+      "reason": "The answer opens with the monthly category totals table and the budget comparison table, with only brief notes before them. The findings list (\"Three things I'd most want you to know\") comes last, after the tables, code and cleaning notes.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "three-supported-findings",
+      "check_status": "failed",
+      "reason": "The answer has three findings, but its numbers contradict the reference. June dining is $221.99 against a reference of $212.74. Shopping is $1,113.31, $964.82 and $1,232.08, and no reference policy gives those. Its claim that August shopping is $32.08 over target also conflicts with the reference, which says shopping is under target or at most $18.31 over.",
+      "diagnoses": [
+        {
+          "category": "Dining and coffee",
+          "period": "2026-06",
+          "reported_amount": "221.99",
+          "reference_amount": "212.74",
+          "accepted_policies": [],
+          "cause": "Dining and coffee 2026-06: reported 221.99, reference 212.74, a difference of +9.25. Explained by: counted line 55 \"6/24/26 Bowl-O-Rama 9.25\" (+9.25), which the reference puts in Entertainment.",
+          "explanations": [
+            [
+              {
+                "line_number": 55,
+                "source_text": "6/24/26 Bowl-O-Rama 9.25",
+                "mistake": "wrongly_included",
+                "amount_effect": "9.25",
+                "reference_category": "Entertainment",
+                "reference_period": "2026-06"
+              }
+            ]
+          ]
+        },
+        {
+          "category": "Shopping",
+          "period": "2026-07",
+          "reported_amount": "964.82",
+          "reference_amount": "756.72",
+          "accepted_policies": [],
+          "cause": "Shopping 2026-07: reported 964.82, reference 756.72, a difference of +208.10 that no combination of up to 3 entries explains (a broader categorization difference or an arithmetic error).",
+          "explanations": []
+        },
+        {
+          "category": "Shopping",
+          "period": "2026-06",
+          "reported_amount": "1113.31",
+          "reference_amount": "1020.77",
+          "accepted_policies": [
+            "Barnes & Noble in Shopping"
+          ],
+          "cause": "Shopping 2026-06: reported 1,113.31, reference 1,020.77 (under the accepted policy 'Barnes & Noble in Shopping'), a difference of +92.54. Explained by: counted line 63 \"Walgreens, 6/28 -- $92.54\" (+92.54), which the reference puts in Health and fitness.",
+          "explanations": [
+            [
+              {
+                "line_number": 63,
+                "source_text": "Walgreens, 6/28 -- $92.54",
+                "mistake": "wrongly_included",
+                "amount_effect": "92.54",
+                "reference_category": "Health and fitness",
+                "reference_period": "2026-06"
+              }
+            ]
+          ]
+        },
+        {
+          "category": "Shopping",
+          "period": "2026-08",
+          "reported_amount": "1232.08",
+          "reference_amount": "1218.31",
+          "accepted_policies": [
+            "Barnes & Noble in Shopping"
+          ],
+          "cause": "Shopping 2026-08: reported 1,232.08, reference 1,218.31 (under the accepted policy 'Barnes & Noble in Shopping'), a difference of +13.77. Explained by: counted line 166 \"Walgreens - $13.77 (08-14)\" (+13.77), which the reference puts in Health and fitness.",
+          "explanations": [
+            [
+              {
+                "line_number": 166,
+                "source_text": "Walgreens - $13.77 (08-14)",
+                "mistake": "wrongly_included",
+                "amount_effect": "13.77",
+                "reference_category": "Health and fitness",
+                "reference_period": "2026-08"
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "check_name": "no-invented-budgets",
+      "check_status": "passed",
+      "reason": "The answer compares spending only against the $260 eating out/coffee target and the roughly $1,200 shopping target. It describes other categories, such as transport/travel and total spending, by month-over-month change without calling them over or under a budget.",
+      "diagnoses": []
+    }
+  ]
+}

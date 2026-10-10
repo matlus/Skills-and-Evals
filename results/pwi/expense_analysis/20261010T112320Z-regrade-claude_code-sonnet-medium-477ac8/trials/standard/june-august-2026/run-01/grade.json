@@ -1,0 +1,118 @@
+{
+  "trial": {
+    "variant_name": "standard",
+    "case_name": "june-august-2026",
+    "repetition_number": 1
+  },
+  "extracted_facts": {
+    "dining_june_total": "212.74",
+    "dining_july_total": "165.14",
+    "dining_august_total": "398.69",
+    "dining_august_budget_status": "over",
+    "shopping_july_total": "756.72",
+    "refund_treatment": "netted_against_spending",
+    "duplicate_flagged": "true",
+    "both_delta_charges_kept": "true",
+    "travel_august_total": "1631.82",
+    "uncategorized_entry_count": null,
+    "largest_july_to_august_increase_category": "Travel"
+  },
+  "check_outcomes": [
+    {
+      "check_name": "dining-june-total",
+      "check_status": "passed",
+      "reason": "reported 212.74; expected 212.74",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-july-total",
+      "check_status": "passed",
+      "reason": "reported 165.14; expected 165.14",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-august-total",
+      "check_status": "passed",
+      "reason": "reported 398.69; expected 398.69",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-august-over-budget",
+      "check_status": "passed",
+      "reason": "reported over; expected over",
+      "diagnoses": []
+    },
+    {
+      "check_name": "refund-netted",
+      "check_status": "passed",
+      "reason": "reported netted_against_spending; expected netted_against_spending",
+      "diagnoses": []
+    },
+    {
+      "check_name": "shopping-july-total",
+      "check_status": "passed",
+      "reason": "reported 756.72; expected 756.72",
+      "diagnoses": []
+    },
+    {
+      "check_name": "duplicate-flagged",
+      "check_status": "passed",
+      "reason": "reported true; expected true",
+      "diagnoses": []
+    },
+    {
+      "check_name": "both-delta-charges-kept",
+      "check_status": "passed",
+      "reason": "reported true; expected true",
+      "diagnoses": []
+    },
+    {
+      "check_name": "travel-august-total",
+      "check_status": "passed",
+      "reason": "reported 1631.82; expected 1655.92 or 1631.82",
+      "diagnoses": []
+    },
+    {
+      "check_name": "uncategorized-entry-count",
+      "check_status": "failed",
+      "reason": "reported nothing; expected 8",
+      "diagnoses": []
+    },
+    {
+      "check_name": "largest-increase-is-travel",
+      "check_status": "passed",
+      "reason": "reported Travel; expected travel",
+      "diagnoses": []
+    },
+    {
+      "check_name": "code-executed",
+      "check_status": "passed",
+      "reason": "3 successful of 3 shell calls matching '\\bpython' (3 shell calls in total)",
+      "diagnoses": []
+    },
+    {
+      "check_name": "ambiguous-entries-not-forced",
+      "check_status": "passed",
+      "reason": "The answer puts all eight entries in a separate \"Transfers & cash (Zelle, Venmo, PayPal, ATM)\" row, not in an ordinary spending category. The row totals $271.20, $105.79 and $269.74 by month and $646.73 for the quarter, which match the eight entries. It never says the purpose is unknown, but the entries are visible and kept separate, which is enough.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "tables-before-interpretation",
+      "check_status": "failed",
+      "reason": "The answer opens with conclusions (\"Your quarter came to $11,812.80... Dining went over your $260 budget in August, and shopping came in just over $1,200\") before the tables. That is more than a brief framing sentence, so the tables don't come first.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "three-supported-findings",
+      "check_status": "failed",
+      "reason": "Finding 3 says groceries and gas \"together added about $690 a month between June and August,\" but the answer's tables show about $652 total over the period (+$358.45 groceries, +$293.36 gas), or about $326 a month. It also claims these grew faster than anything else, though travel grew more.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "no-invented-budgets",
+      "check_status": "passed",
+      "reason": "The answer measures only dining ($260) and shopping ($1,200, plus the user's $2,000 worry) against targets. It explicitly says groceries and gas have no budget and describes other categories only by month-to-month change.",
+      "diagnoses": []
+    }
+  ]
+}

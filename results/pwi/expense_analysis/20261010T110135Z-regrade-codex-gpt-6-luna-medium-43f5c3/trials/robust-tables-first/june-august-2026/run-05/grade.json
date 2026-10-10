@@ -1,0 +1,148 @@
+{
+  "trial": {
+    "variant_name": "robust-tables-first",
+    "case_name": "june-august-2026",
+    "repetition_number": 5
+  },
+  "extracted_facts": {
+    "dining_june_total": "212.74",
+    "dining_july_total": "165.14",
+    "dining_august_total": "398.69",
+    "dining_august_budget_status": "over",
+    "shopping_july_total": "907.22",
+    "refund_treatment": "netted_against_spending",
+    "duplicate_flagged": "true",
+    "both_delta_charges_kept": null,
+    "travel_august_total": "1767.41",
+    "uncategorized_entry_count": "7",
+    "largest_july_to_august_increase_category": "Travel"
+  },
+  "check_outcomes": [
+    {
+      "check_name": "dining-june-total",
+      "check_status": "passed",
+      "reason": "reported 212.74; expected 212.74",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-july-total",
+      "check_status": "passed",
+      "reason": "reported 165.14; expected 165.14",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-august-total",
+      "check_status": "passed",
+      "reason": "reported 398.69; expected 398.69",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-august-over-budget",
+      "check_status": "passed",
+      "reason": "reported over; expected over",
+      "diagnoses": []
+    },
+    {
+      "check_name": "refund-netted",
+      "check_status": "passed",
+      "reason": "reported netted_against_spending; expected netted_against_spending",
+      "diagnoses": []
+    },
+    {
+      "check_name": "shopping-july-total",
+      "check_status": "failed",
+      "reason": "reported 907.22; expected 756.72",
+      "diagnoses": [
+        {
+          "category": "Shopping",
+          "period": "2026-07",
+          "reported_amount": "907.22",
+          "reference_amount": "756.72",
+          "accepted_policies": [],
+          "cause": "Shopping 2026-07: reported 907.22, reference 756.72, a difference of +150.50 that no combination of up to 3 entries explains (a broader categorization difference or an arithmetic error).",
+          "explanations": []
+        }
+      ]
+    },
+    {
+      "check_name": "duplicate-flagged",
+      "check_status": "passed",
+      "reason": "reported true; expected true",
+      "diagnoses": []
+    },
+    {
+      "check_name": "both-delta-charges-kept",
+      "check_status": "failed",
+      "reason": "reported nothing; expected true",
+      "diagnoses": []
+    },
+    {
+      "check_name": "travel-august-total",
+      "check_status": "failed",
+      "reason": "reported 1767.41; expected 1655.92 or 1631.82",
+      "diagnoses": [
+        {
+          "category": "Travel",
+          "period": "2026-08",
+          "reported_amount": "1767.41",
+          "reference_amount": "1655.92",
+          "accepted_policies": [],
+          "cause": "Travel 2026-08: reported 1,767.41, reference 1,655.92, a difference of +111.49 that no combination of up to 3 entries explains (a broader categorization difference or an arithmetic error).",
+          "explanations": []
+        }
+      ]
+    },
+    {
+      "check_name": "uncategorized-entry-count",
+      "check_status": "failed",
+      "reason": "reported 7; expected 8",
+      "diagnoses": []
+    },
+    {
+      "check_name": "largest-increase-is-travel",
+      "check_status": "passed",
+      "reason": "reported Travel; expected travel",
+      "diagnoses": []
+    },
+    {
+      "check_name": "code-executed",
+      "check_status": "passed",
+      "reason": "4 successful of 4 shell calls matching '\\bpython' (5 shell calls in total)",
+      "diagnoses": []
+    },
+    {
+      "check_name": "ambiguous-entries-not-forced",
+      "check_status": "passed",
+      "reason": "The answer has an Uncategorized column and says the log doesn't state what these payments were for. The July uncategorized total of $105.79 equals $75.00 + $30.79, so the 7/29 ATM withdrawal is included even though the notes don't list it. August's $269.74 equals the three August items. June's $280.45 is $9.25 above the three June entries ($271.20), but that doesn't put any of the eight entries into a spending category.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "tables-before-interpretation",
+      "check_status": "passed",
+      "reason": "The answer opens directly with the monthly category totals table and the budget comparison table. The findings section (\"Three things I'd most want you to know\") comes after them.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "three-supported-findings",
+      "check_status": "failed",
+      "reason": "The Travel finding says July was $99.08 and August was $1,767.41, with a $1,668.33 increase. The reference has Travel at $0 in July and $1,655.92 in August ($1,631.82 if the Uber is counted as transport). The answer's Travel category (June $327.78) also contradicts the reference's $0 for June.",
+      "diagnoses": [
+        {
+          "category": "Travel",
+          "period": "2026-08",
+          "reported_amount": "1767.41",
+          "reference_amount": "1655.92",
+          "accepted_policies": [],
+          "cause": "Travel 2026-08: reported 1,767.41, reference 1,655.92, a difference of +111.49 that no combination of up to 3 entries explains (a broader categorization difference or an arithmetic error).",
+          "explanations": []
+        }
+      ]
+    },
+    {
+      "check_name": "no-invented-budgets",
+      "check_status": "passed",
+      "reason": "The answer compares against only the two stated targets (eating out under $260, shopping about $1,200). Groceries, travel and the other categories are described with no budget claims. The Travel increase is stated as a month-over-month change, not as over or under a budget.",
+      "diagnoses": []
+    }
+  ]
+}

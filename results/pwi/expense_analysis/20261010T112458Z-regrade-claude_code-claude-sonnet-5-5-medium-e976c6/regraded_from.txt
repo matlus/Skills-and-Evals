@@ -1,0 +1,2 @@
+D:\Python\Skills and Evals\results\pwi\expense_analysis\20261009T185109Z-claude_code-claude-sonnet-5-5-medium-d1b3a9
+The original run folder (20261009T185109Z-claude_code-claude-sonnet-5-5-medium-d1b3a9) was removed on 2026-10-10 after this regrade; this folder holds its answers and event streams.

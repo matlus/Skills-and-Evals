@@ -1,0 +1,128 @@
+{
+  "trial": {
+    "variant_name": "robust-tables-first",
+    "case_name": "june-august-2026",
+    "repetition_number": 4
+  },
+  "extracted_facts": {
+    "dining_june_total": "212.74",
+    "dining_july_total": "165.14",
+    "dining_august_total": "398.69",
+    "dining_august_budget_status": "over",
+    "shopping_july_total": "756.72",
+    "refund_treatment": "netted_against_spending",
+    "duplicate_flagged": "true",
+    "both_delta_charges_kept": "true",
+    "travel_august_total": "1767.41",
+    "uncategorized_entry_count": "7",
+    "largest_july_to_august_increase_category": "Transport & travel"
+  },
+  "check_outcomes": [
+    {
+      "check_name": "dining-june-total",
+      "check_status": "passed",
+      "reason": "reported 212.74; expected 212.74",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-july-total",
+      "check_status": "passed",
+      "reason": "reported 165.14; expected 165.14",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-august-total",
+      "check_status": "passed",
+      "reason": "reported 398.69; expected 398.69",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-august-over-budget",
+      "check_status": "passed",
+      "reason": "reported over; expected over",
+      "diagnoses": []
+    },
+    {
+      "check_name": "refund-netted",
+      "check_status": "passed",
+      "reason": "reported netted_against_spending; expected netted_against_spending",
+      "diagnoses": []
+    },
+    {
+      "check_name": "shopping-july-total",
+      "check_status": "passed",
+      "reason": "reported 756.72; expected 756.72",
+      "diagnoses": []
+    },
+    {
+      "check_name": "duplicate-flagged",
+      "check_status": "passed",
+      "reason": "reported true; expected true",
+      "diagnoses": []
+    },
+    {
+      "check_name": "both-delta-charges-kept",
+      "check_status": "passed",
+      "reason": "reported true; expected true",
+      "diagnoses": []
+    },
+    {
+      "check_name": "travel-august-total",
+      "check_status": "failed",
+      "reason": "reported 1767.41; expected 1655.92 or 1631.82",
+      "diagnoses": [
+        {
+          "category": "Travel",
+          "period": "2026-08",
+          "reported_amount": "1767.41",
+          "reference_amount": "1655.92",
+          "accepted_policies": [],
+          "cause": "Travel 2026-08: reported 1,767.41, reference 1,655.92, a difference of +111.49 that no combination of up to 3 entries explains (a broader categorization difference or an arithmetic error).",
+          "explanations": []
+        }
+      ]
+    },
+    {
+      "check_name": "uncategorized-entry-count",
+      "check_status": "failed",
+      "reason": "reported 7; expected 8",
+      "diagnoses": []
+    },
+    {
+      "check_name": "largest-increase-is-travel",
+      "check_status": "failed",
+      "reason": "reported Transport & travel; expected travel",
+      "diagnoses": []
+    },
+    {
+      "check_name": "code-executed",
+      "check_status": "passed",
+      "reason": "1 successful of 1 shell calls matching '\\bpython' (1 shell calls in total)",
+      "diagnoses": []
+    },
+    {
+      "check_name": "ambiguous-entries-not-forced",
+      "check_status": "passed",
+      "reason": "The answer puts all eight entries in a separate \"Uncategorized\" row ($646.73, which matches their sum). Its notes list each one (Zelle, PayPal, Venmo to Sam, ATM) and describe the purpose as unknown. None is assigned to a spending category.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "tables-before-interpretation",
+      "check_status": "passed",
+      "reason": "The answer opens with a \"Computed tables\" section containing the monthly totals by category and the budget comparison, before the data-cleaning notes and the \"Three things to know\" findings.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "three-supported-findings",
+      "check_status": "passed",
+      "reason": "The answer gives exactly three findings. Its dining figures (212.74, 165.14, 398.69) and its shopping figures with books in Shopping (1,020.77, 756.72, 1,218.31, $18.31 over in August) match the reference. The tables sum to $11,758.68 (11,111.95 + 646.73), which matches the reference total with the duplicate removed. The 63% and $1,668.33 figures are consistent with the answer's own tables.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "no-invented-budgets",
+      "check_status": "passed",
+      "reason": "The budget comparison covers only eating out/coffee ($260/mo) and shopping ($1,200/mo). The quarterly equivalents are just those targets multiplied by three. Other categories, such as transport, are described only by change, and the answer explicitly says transport has no budget target.",
+      "diagnoses": []
+    }
+  ]
+}

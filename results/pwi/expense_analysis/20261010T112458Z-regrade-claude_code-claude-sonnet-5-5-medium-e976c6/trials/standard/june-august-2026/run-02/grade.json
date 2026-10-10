@@ -1,0 +1,164 @@
+{
+  "trial": {
+    "variant_name": "standard",
+    "case_name": "june-august-2026",
+    "repetition_number": 2
+  },
+  "extracted_facts": {
+    "dining_june_total": "212.74",
+    "dining_july_total": "165.14",
+    "dining_august_total": "398.69",
+    "dining_august_budget_status": "over",
+    "shopping_july_total": "756.72",
+    "refund_treatment": "netted_against_spending",
+    "duplicate_flagged": "true",
+    "both_delta_charges_kept": "true",
+    "travel_august_total": "1563.82",
+    "uncategorized_entry_count": null,
+    "largest_july_to_august_increase_category": null
+  },
+  "check_outcomes": [
+    {
+      "check_name": "dining-june-total",
+      "check_status": "passed",
+      "reason": "reported 212.74; expected 212.74",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-july-total",
+      "check_status": "passed",
+      "reason": "reported 165.14; expected 165.14",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-august-total",
+      "check_status": "passed",
+      "reason": "reported 398.69; expected 398.69",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-august-over-budget",
+      "check_status": "passed",
+      "reason": "reported over; expected over",
+      "diagnoses": []
+    },
+    {
+      "check_name": "refund-netted",
+      "check_status": "passed",
+      "reason": "reported netted_against_spending; expected netted_against_spending",
+      "diagnoses": []
+    },
+    {
+      "check_name": "shopping-july-total",
+      "check_status": "passed",
+      "reason": "reported 756.72; expected 756.72",
+      "diagnoses": []
+    },
+    {
+      "check_name": "duplicate-flagged",
+      "check_status": "passed",
+      "reason": "reported true; expected true",
+      "diagnoses": []
+    },
+    {
+      "check_name": "both-delta-charges-kept",
+      "check_status": "passed",
+      "reason": "reported true; expected true",
+      "diagnoses": []
+    },
+    {
+      "check_name": "travel-august-total",
+      "check_status": "failed",
+      "reason": "reported 1563.82; expected 1655.92 or 1631.82",
+      "diagnoses": [
+        {
+          "category": "Travel",
+          "period": "2026-08",
+          "reported_amount": "1563.82",
+          "reference_amount": "1631.82",
+          "accepted_policies": [
+            "August 16 Uber in Transport"
+          ],
+          "cause": "Travel 2026-08: reported 1,563.82, reference 1,631.82 (under the accepted policy 'August 16 Uber in Transport'), a difference of -68.00. Explained by: left out line 169 \"Airport Parking - $68.00 (August 14)\" (-68.00).",
+          "explanations": [
+            [
+              {
+                "line_number": 169,
+                "source_text": "Airport Parking - $68.00 (August 14)",
+                "mistake": "left_out",
+                "amount_effect": "-68.00",
+                "reference_category": "Travel",
+                "reference_period": "2026-08"
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "check_name": "uncategorized-entry-count",
+      "check_status": "failed",
+      "reason": "reported nothing; expected 8",
+      "diagnoses": []
+    },
+    {
+      "check_name": "largest-increase-is-travel",
+      "check_status": "failed",
+      "reason": "reported nothing; expected travel",
+      "diagnoses": []
+    },
+    {
+      "check_name": "code-executed",
+      "check_status": "passed",
+      "reason": "1 successful of 1 shell calls matching '\\bpython' (1 shell calls in total)",
+      "diagnoses": []
+    },
+    {
+      "check_name": "ambiguous-entries-not-forced",
+      "check_status": "passed",
+      "reason": "The answer puts the Zelle, Venmo, PayPal and ATM entries in their own \"Transfers & cash\" row, separate from the spending categories. Its monthly sums ($271.20, $105.79 and $269.74) match the eight rubric entries. It also says it left them apart \"since I can't tell what they paid for.\"",
+      "diagnoses": []
+    },
+    {
+      "check_name": "tables-before-interpretation",
+      "check_status": "passed",
+      "reason": "After a brief framing paragraph, the answer shows the monthly-by-category table and the budget comparison table before the \"three most important things\" findings and the entries-to-check section.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "three-supported-findings",
+      "check_status": "failed",
+      "reason": "The answer gives exactly three findings, and its dining and shopping figures match the reference. But it puts August travel at $1,563.82 and calls the trip \"$1,564\". The reference gives $1,655.92, or $1,631.82 if the Uber is counted as transport, and the answer's figure is lower than both. It also puts the $68 airport parking in transport, outside travel.",
+      "diagnoses": [
+        {
+          "category": "Travel",
+          "period": "2026-08",
+          "reported_amount": "1563.82",
+          "reference_amount": "1631.82",
+          "accepted_policies": [
+            "August 16 Uber in Transport"
+          ],
+          "cause": "Travel 2026-08: reported 1,563.82, reference 1,631.82 (under the accepted policy 'August 16 Uber in Transport'), a difference of -68.00. Explained by: left out line 169 \"Airport Parking - $68.00 (August 14)\" (-68.00).",
+          "explanations": [
+            [
+              {
+                "line_number": 169,
+                "source_text": "Airport Parking - $68.00 (August 14)",
+                "mistake": "left_out",
+                "amount_effect": "-68.00",
+                "reference_category": "Travel",
+                "reference_period": "2026-08"
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "check_name": "no-invented-budgets",
+      "check_status": "passed",
+      "reason": "The answer compares only dining ($260) and shopping ($1,200, plus the $2,000 worry) against targets. It says explicitly that groceries and gas have no budget and only suggests putting a number on them. It makes no over/under judgments on other categories.",
+      "diagnoses": []
+    }
+  ]
+}

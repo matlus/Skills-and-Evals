@@ -1,0 +1,207 @@
+{
+  "trial": {
+    "variant_name": "robust-tables-first",
+    "case_name": "june-august-2026",
+    "repetition_number": 3
+  },
+  "extracted_facts": {
+    "dining_june_total": "221.99",
+    "dining_july_total": "165.14",
+    "dining_august_total": "398.69",
+    "dining_august_budget_status": "over",
+    "shopping_july_total": "996.34",
+    "refund_treatment": "netted_against_spending",
+    "duplicate_flagged": "true",
+    "both_delta_charges_kept": null,
+    "travel_august_total": "1767.41",
+    "uncategorized_entry_count": "8",
+    "largest_july_to_august_increase_category": "Transport: parking/travel"
+  },
+  "check_outcomes": [
+    {
+      "check_name": "dining-june-total",
+      "check_status": "failed",
+      "reason": "reported 221.99; expected 212.74",
+      "diagnoses": [
+        {
+          "category": "Dining and coffee",
+          "period": "2026-06",
+          "reported_amount": "221.99",
+          "reference_amount": "212.74",
+          "accepted_policies": [],
+          "cause": "Dining and coffee 2026-06: reported 221.99, reference 212.74, a difference of +9.25. Explained by: counted line 55 \"6/24/26 Bowl-O-Rama 9.25\" (+9.25), which the reference puts in Entertainment.",
+          "explanations": [
+            [
+              {
+                "line_number": 55,
+                "source_text": "6/24/26 Bowl-O-Rama 9.25",
+                "mistake": "wrongly_included",
+                "amount_effect": "9.25",
+                "reference_category": "Entertainment",
+                "reference_period": "2026-06"
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "check_name": "dining-july-total",
+      "check_status": "passed",
+      "reason": "reported 165.14; expected 165.14",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-august-total",
+      "check_status": "passed",
+      "reason": "reported 398.69; expected 398.69",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-august-over-budget",
+      "check_status": "passed",
+      "reason": "reported over; expected over",
+      "diagnoses": []
+    },
+    {
+      "check_name": "refund-netted",
+      "check_status": "passed",
+      "reason": "reported netted_against_spending; expected netted_against_spending",
+      "diagnoses": []
+    },
+    {
+      "check_name": "shopping-july-total",
+      "check_status": "failed",
+      "reason": "reported 996.34; expected 756.72",
+      "diagnoses": [
+        {
+          "category": "Shopping",
+          "period": "2026-07",
+          "reported_amount": "996.34",
+          "reference_amount": "756.72",
+          "accepted_policies": [],
+          "cause": "Shopping 2026-07: reported 996.34, reference 756.72, a difference of +239.62 that no combination of up to 3 entries explains (a broader categorization difference or an arithmetic error).",
+          "explanations": []
+        }
+      ]
+    },
+    {
+      "check_name": "duplicate-flagged",
+      "check_status": "passed",
+      "reason": "reported true; expected true",
+      "diagnoses": []
+    },
+    {
+      "check_name": "both-delta-charges-kept",
+      "check_status": "failed",
+      "reason": "reported nothing; expected true",
+      "diagnoses": []
+    },
+    {
+      "check_name": "travel-august-total",
+      "check_status": "failed",
+      "reason": "reported 1767.41; expected 1655.92 or 1631.82",
+      "diagnoses": [
+        {
+          "category": "Travel",
+          "period": "2026-08",
+          "reported_amount": "1767.41",
+          "reference_amount": "1655.92",
+          "accepted_policies": [],
+          "cause": "Travel 2026-08: reported 1,767.41, reference 1,655.92, a difference of +111.49 that no combination of up to 3 entries explains (a broader categorization difference or an arithmetic error).",
+          "explanations": []
+        }
+      ]
+    },
+    {
+      "check_name": "uncategorized-entry-count",
+      "check_status": "passed",
+      "reason": "reported 8; expected 8",
+      "diagnoses": []
+    },
+    {
+      "check_name": "largest-increase-is-travel",
+      "check_status": "failed",
+      "reason": "reported Transport: parking/travel; expected travel",
+      "diagnoses": []
+    },
+    {
+      "check_name": "code-executed",
+      "check_status": "passed",
+      "reason": "3 successful of 3 shell calls matching '\\bpython' (5 shell calls in total)",
+      "diagnoses": []
+    },
+    {
+      "check_name": "ambiguous-entries-not-forced",
+      "check_status": "passed",
+      "reason": "All eight entries are kept out of spending categories and put in an \"Uncategorized\" column. The notes list each one and say they were left uncategorized because the log doesn't say what they paid for. The column totals match the entries (June $271.20, July $105.79, August $269.74).",
+      "diagnoses": []
+    },
+    {
+      "check_name": "tables-before-interpretation",
+      "check_status": "passed",
+      "reason": "The answer opens directly with the monthly category totals table and the budget comparison table, and only afterwards gives data-cleaning notes and the \"three things I'd most want you to know\" findings.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "three-supported-findings",
+      "check_status": "failed",
+      "reason": "The answer's figures contradict the reference values. June dining is $221.99 against $212.74. Shopping is $1,232.66 in June and $1,638.99 in August, so it claims shopping was over target in June and by $438.99 in August. Under either policy June shopping is under target and August is at most $18.31 over.",
+      "diagnoses": [
+        {
+          "category": "Dining and coffee",
+          "period": "2026-06",
+          "reported_amount": "221.99",
+          "reference_amount": "212.74",
+          "accepted_policies": [],
+          "cause": "Dining and coffee 2026-06: reported 221.99, reference 212.74, a difference of +9.25. Explained by: counted line 55 \"6/24/26 Bowl-O-Rama 9.25\" (+9.25), which the reference puts in Entertainment.",
+          "explanations": [
+            [
+              {
+                "line_number": 55,
+                "source_text": "6/24/26 Bowl-O-Rama 9.25",
+                "mistake": "wrongly_included",
+                "amount_effect": "9.25",
+                "reference_category": "Entertainment",
+                "reference_period": "2026-06"
+              }
+            ]
+          ]
+        },
+        {
+          "category": "Shopping",
+          "period": "2026-06",
+          "reported_amount": "1232.66",
+          "reference_amount": "960.07",
+          "accepted_policies": [],
+          "cause": "Shopping 2026-06: reported 1,232.66, reference 960.07, a difference of +272.59 that no combination of up to 3 entries explains (a broader categorization difference or an arithmetic error).",
+          "explanations": []
+        },
+        {
+          "category": "Shopping",
+          "period": "2026-08",
+          "reported_amount": "1638.99",
+          "reference_amount": "1061.93",
+          "accepted_policies": [],
+          "cause": "Shopping 2026-08: reported 1,638.99, reference 1,061.93, a difference of +577.06 that no combination of up to 3 entries explains (a broader categorization difference or an arithmetic error).",
+          "explanations": []
+        },
+        {
+          "category": "Travel",
+          "period": "2026-08",
+          "reported_amount": "1767.41",
+          "reference_amount": "1655.92",
+          "accepted_policies": [],
+          "cause": "Travel 2026-08: reported 1,767.41, reference 1,655.92, a difference of +111.49 that no combination of up to 3 entries explains (a broader categorization difference or an arithmetic error).",
+          "explanations": []
+        }
+      ]
+    },
+    {
+      "check_name": "no-invented-budgets",
+      "check_status": "passed",
+      "reason": "The answer compares only eating out ($260) and shopping ($1,200) against targets, and explicitly notes that transport parking/travel has no stated budget target. No other category is given an invented budget or judged over or under.",
+      "diagnoses": []
+    }
+  ]
+}

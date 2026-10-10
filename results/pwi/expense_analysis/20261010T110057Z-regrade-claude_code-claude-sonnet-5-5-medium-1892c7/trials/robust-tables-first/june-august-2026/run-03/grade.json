@@ -1,0 +1,141 @@
+{
+  "trial": {
+    "variant_name": "robust-tables-first",
+    "case_name": "june-august-2026",
+    "repetition_number": 3
+  },
+  "extracted_facts": {
+    "dining_june_total": "212.74",
+    "dining_july_total": "165.14",
+    "dining_august_total": "398.69",
+    "dining_august_budget_status": "over",
+    "shopping_july_total": "756.72",
+    "refund_treatment": "netted_against_spending",
+    "duplicate_flagged": "true",
+    "both_delta_charges_kept": "false",
+    "travel_august_total": "1219.22",
+    "uncategorized_entry_count": "8",
+    "largest_july_to_august_increase_category": "Travel"
+  },
+  "check_outcomes": [
+    {
+      "check_name": "dining-june-total",
+      "check_status": "passed",
+      "reason": "reported 212.74; expected 212.74",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-july-total",
+      "check_status": "passed",
+      "reason": "reported 165.14; expected 165.14",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-august-total",
+      "check_status": "passed",
+      "reason": "reported 398.69; expected 398.69",
+      "diagnoses": []
+    },
+    {
+      "check_name": "dining-august-over-budget",
+      "check_status": "passed",
+      "reason": "reported over; expected over",
+      "diagnoses": []
+    },
+    {
+      "check_name": "refund-netted",
+      "check_status": "passed",
+      "reason": "reported netted_against_spending; expected netted_against_spending",
+      "diagnoses": []
+    },
+    {
+      "check_name": "shopping-july-total",
+      "check_status": "passed",
+      "reason": "reported 756.72; expected 756.72",
+      "diagnoses": []
+    },
+    {
+      "check_name": "duplicate-flagged",
+      "check_status": "passed",
+      "reason": "reported true; expected true",
+      "diagnoses": []
+    },
+    {
+      "check_name": "both-delta-charges-kept",
+      "check_status": "failed",
+      "reason": "reported false; expected true",
+      "diagnoses": []
+    },
+    {
+      "check_name": "travel-august-total",
+      "check_status": "failed",
+      "reason": "reported 1219.22; expected 1655.92 or 1631.82",
+      "diagnoses": [
+        {
+          "category": "Travel",
+          "period": "2026-08",
+          "reported_amount": "1219.22",
+          "reference_amount": "1631.82",
+          "accepted_policies": [
+            "August 16 Uber in Transport"
+          ],
+          "cause": "Travel 2026-08: reported 1,219.22, reference 1,631.82 (under the accepted policy 'August 16 Uber in Transport'), a difference of -412.60. Explained by: left out line 167 \"Delta Air Lines - $412.60 (Aug. 14)\" (-412.60).",
+          "explanations": [
+            [
+              {
+                "line_number": 167,
+                "source_text": "Delta Air Lines - $412.60 (Aug. 14)",
+                "mistake": "left_out",
+                "amount_effect": "-412.60",
+                "reference_category": "Travel",
+                "reference_period": "2026-08"
+              }
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "check_name": "uncategorized-entry-count",
+      "check_status": "passed",
+      "reason": "reported 8; expected 8",
+      "diagnoses": []
+    },
+    {
+      "check_name": "largest-increase-is-travel",
+      "check_status": "passed",
+      "reason": "reported Travel; expected travel",
+      "diagnoses": []
+    },
+    {
+      "check_name": "code-executed",
+      "check_status": "passed",
+      "reason": "2 successful of 5 shell calls matching '\\bpython' (6 shell calls in total)",
+      "diagnoses": []
+    },
+    {
+      "check_name": "ambiguous-entries-not-forced",
+      "check_status": "passed",
+      "reason": "All eight entries are held in a separate \"Uncategorized\" group, described as transfers and cash with no description. Each is listed with its correct date and amount, and the monthly and overall totals reconcile to $646.73.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "tables-before-interpretation",
+      "check_status": "passed",
+      "reason": "The answer opens with a one-line framing sentence, then shows the monthly totals by category and budget comparison tables. Cleaning notes and the \"Three things to know\" findings come only after the tables.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "three-supported-findings",
+      "check_status": "passed",
+      "reason": "The answer gives exactly three findings. The dining figures (212.74, 165.14, 398.69, over budget in August only) and the shopping figures (1,020.77, 756.72, 1,218.31, +$18.31 over in August) match the reference under the books-in-Shopping policy, with Steam in Entertainment. The gas trend agrees with the answer's own table. Its Travel total and grand total differ from the reference, but neither appears in the three findings.",
+      "diagnoses": []
+    },
+    {
+      "check_name": "no-invented-budgets",
+      "check_status": "passed",
+      "reason": "The answer compares spending against only the two targets ($260 eating out, $1,200 shopping). It explicitly says gas has no target and doesn't judge any other category as over or under a budget.",
+      "diagnoses": []
+    }
+  ]
+}

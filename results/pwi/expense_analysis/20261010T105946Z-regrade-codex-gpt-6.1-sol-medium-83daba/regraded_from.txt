@@ -1,0 +1,2 @@
+D:\Python\Skills and Evals\results\pwi\expense_analysis\20261009T203942Z-codex-gpt-6.1-sol-medium-9a64ba
+The original run folder (20261009T203942Z-codex-gpt-6.1-sol-medium-9a64ba) was removed on 2026-10-10 after this regrade; this folder holds its answers and event streams.

@@ -1,0 +1,142 @@
+import json
+import re
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Final, cast, final
+
+from prompt_evals import CodingAssistant, EffortLevel, RecordedCompletedTrial, RecordedErroredTrial, RecordedTrial, TrialIdentity
+
+TEXT_ENCODING: Final[str] = "utf-8"
+SCORECARD_FILE_NAME: Final[str] = "scorecard.json"
+TRIALS_DIRECTORY_NAME: Final[str] = "trials"
+EVENT_STREAM_FILE_NAME: Final[str] = "event_stream.jsonl"
+ERROR_FILE_NAME: Final[str] = "error.txt"
+RUN_DIRECTORY_PATTERN: Final[re.Pattern[str]] = re.compile(r"^run-(\d+)$")
+
+type JsonObject = dict[str, object]
+
+
+class RecordedRunUnreadableError(Exception):
+    """The folder is not a run directory this app wrote, so it cannot be regraded."""
+
+
+@dataclass(frozen=True)
+class RecordedRun:
+    coding_assistant: CodingAssistant
+    model_name: str
+    effort_level: EffortLevel
+    recorded_trials: tuple[RecordedTrial, ...]
+
+
+@dataclass(frozen=True)
+class RecordedRunSettings:
+    coding_assistant: CodingAssistant
+    model_name: str
+    effort_level: EffortLevel
+
+
+@final
+class RecordedRunReader:
+    """Reads a run directory written by ResultsDirectoryWriter back into recorded trials.
+
+    The run's settings come from its scorecard.json. Runs written before the scorecard recorded the coding assistant
+    use `fallback_coding_assistant`.
+    """
+
+    @staticmethod
+    def read_recorded_run(run_directory: Path, fallback_coding_assistant: CodingAssistant) -> RecordedRun:
+        scorecard_path: Path = run_directory / SCORECARD_FILE_NAME
+        recorded_run_settings: RecordedRunSettings = RecordedRunReader._parse_run_settings(
+            RecordedRunReader._read_text_file(scorecard_path), scorecard_path, fallback_coding_assistant
+        )
+        return RecordedRun(
+            coding_assistant=recorded_run_settings.coding_assistant,
+            model_name=recorded_run_settings.model_name,
+            effort_level=recorded_run_settings.effort_level,
+            recorded_trials=RecordedRunReader._read_recorded_trials(run_directory / TRIALS_DIRECTORY_NAME),
+        )
+
+    @staticmethod
+    def _parse_run_settings(scorecard_text: str, scorecard_path: Path, fallback_coding_assistant: CodingAssistant) -> RecordedRunSettings:
+        try:
+            scorecard_document: object = json.loads(scorecard_text)
+        except json.JSONDecodeError as invalid_scorecard:
+            raise RecordedRunUnreadableError(f"{scorecard_path} cannot be read: {invalid_scorecard}") from invalid_scorecard
+        if not isinstance(scorecard_document, dict):
+            raise RecordedRunUnreadableError(f"{scorecard_path} does not hold a JSON object")
+        scorecard_object: JsonObject = cast(JsonObject, scorecard_document)
+        coding_assistant_value: object = scorecard_object.get("coding_assistant", fallback_coding_assistant.value)
+        model_name: object = scorecard_object.get("model_name")
+        effort_level_value: object = scorecard_object.get("effort_level")
+        if not isinstance(coding_assistant_value, str) or not isinstance(model_name, str) or not isinstance(effort_level_value, str):
+            field_value_by_field_name: dict[str, object] = {
+                "coding_assistant": coding_assistant_value,
+                "model_name": model_name,
+                "effort_level": effort_level_value,
+            }
+            non_string_fields: list[str] = [
+                f"{field_name}={field_value_by_field_name[field_name]!r}"
+                for field_name in field_value_by_field_name
+                if not isinstance(field_value_by_field_name[field_name], str)
+            ]
+            message: str = (
+                f"{scorecard_path} must hold a string coding_assistant, model_name and effort_level; "
+                f"these are not strings: {', '.join(non_string_fields)}"
+            )
+            raise RecordedRunUnreadableError(message)
+        try:
+            return RecordedRunSettings(
+                coding_assistant=CodingAssistant(coding_assistant_value), model_name=model_name, effort_level=EffortLevel(effort_level_value)
+            )
+        except ValueError as unknown_value:
+            unknown_value_message: str = (
+                f"{scorecard_path}: {unknown_value}; known coding_assistant values are "
+                f"{sorted(coding_assistant.value for coding_assistant in CodingAssistant)} and known effort_level values are "
+                f"{sorted(effort_level.value for effort_level in EffortLevel)}"
+            )
+            raise RecordedRunUnreadableError(unknown_value_message) from unknown_value
+
+    @staticmethod
+    def _read_recorded_trials(trials_directory: Path) -> tuple[RecordedTrial, ...]:
+        # Layout: trials/<variant>/<case>/run-NN/ holding event_stream.jsonl, or error.txt for a trial that errored.
+        recorded_trials: list[RecordedTrial] = [
+            RecordedRunReader._read_recorded_trial(trial_directory, RecordedRunReader._compose_trial_identity(trial_directory))
+            for trial_directory in RecordedRunReader._find_trial_directories(trials_directory)
+        ]
+        if not recorded_trials:
+            raise RecordedRunUnreadableError(f"{trials_directory} holds no trials/<variant>/<case>/run-NN folders")
+        return tuple(recorded_trials)
+
+    @staticmethod
+    def _find_trial_directories(trials_directory: Path) -> list[Path]:
+        return [
+            trial_directory
+            for trial_directory in sorted(trials_directory.glob("*/*/run-*"))
+            if RUN_DIRECTORY_PATTERN.fullmatch(trial_directory.name) is not None and trial_directory.is_dir()
+        ]
+
+    @staticmethod
+    def _compose_trial_identity(trial_directory: Path) -> TrialIdentity:
+        run_match: re.Match[str] | None = RUN_DIRECTORY_PATTERN.fullmatch(trial_directory.name)
+        if run_match is None:
+            raise RecordedRunUnreadableError(f"{trial_directory} is not a run-NN folder")
+        return TrialIdentity(
+            variant_name=trial_directory.parent.parent.name, case_name=trial_directory.parent.name, repetition_number=int(run_match.group(1))
+        )
+
+    @staticmethod
+    def _read_recorded_trial(trial_directory: Path, trial_identity: TrialIdentity) -> RecordedTrial:
+        event_stream_path: Path = trial_directory / EVENT_STREAM_FILE_NAME
+        if event_stream_path.is_file():
+            return RecordedCompletedTrial(trial_identity=trial_identity, event_stream_text=RecordedRunReader._read_text_file(event_stream_path))
+        error_path: Path = trial_directory / ERROR_FILE_NAME
+        if error_path.is_file():
+            return RecordedErroredTrial(trial_identity=trial_identity, error_description=RecordedRunReader._read_text_file(error_path))
+        raise RecordedRunUnreadableError(f"{trial_directory} holds neither {EVENT_STREAM_FILE_NAME} nor {ERROR_FILE_NAME}")
+
+    @staticmethod
+    def _read_text_file(file_path: Path) -> str:
+        try:
+            return file_path.read_text(encoding=TEXT_ENCODING)
+        except (OSError, UnicodeDecodeError) as unreadable_file:
+            raise RecordedRunUnreadableError(f"{file_path} cannot be read: {unreadable_file}") from unreadable_file

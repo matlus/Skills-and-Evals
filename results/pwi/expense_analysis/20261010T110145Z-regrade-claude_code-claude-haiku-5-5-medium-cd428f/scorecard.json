@@ -1,0 +1,252 @@
+{
+  "eval_suite_name": "expense-analysis",
+  "coding_assistant": "claude_code",
+  "model_name": "claude-haiku-5-5",
+  "effort_level": "medium",
+  "repetitions": 5,
+  "scorecard_rows": [
+    {
+      "check_name": "dining-june-total",
+      "description": "June dining & coffee total is $212.74.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 5,
+      "errored_count": 0,
+      "pass_rate": 1.0,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": true,
+      "failure_reasons": []
+    },
+    {
+      "check_name": "dining-july-total",
+      "description": "July dining & coffee total is $165.14.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 5,
+      "errored_count": 0,
+      "pass_rate": 1.0,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": true,
+      "failure_reasons": []
+    },
+    {
+      "check_name": "dining-august-total",
+      "description": "August dining & coffee total is $398.69.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 5,
+      "errored_count": 0,
+      "pass_rate": 1.0,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": true,
+      "failure_reasons": []
+    },
+    {
+      "check_name": "dining-august-over-budget",
+      "description": "August dining is reported as over the $260 target.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 5,
+      "errored_count": 0,
+      "pass_rate": 1.0,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": true,
+      "failure_reasons": []
+    },
+    {
+      "check_name": "refund-netted",
+      "description": "The -$68.00 REI refund reduces spending instead of adding to it.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 5,
+      "errored_count": 0,
+      "pass_rate": 1.0,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": true,
+      "failure_reasons": []
+    },
+    {
+      "check_name": "shopping-july-total",
+      "description": "July shopping is $756.72, which is only true when the refund is netted.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 4,
+      "errored_count": 0,
+      "pass_rate": 0.8,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": true,
+      "failure_reasons": [
+        "june-august-2026/run-01: [failed] reported 466.89; expected 756.72 Likely cause: Shopping 2026-07: reported 466.89, reference 756.72, a difference of -289.83. Explained by: left out line 71 \"7/2/26 IKEA $92.60\" (-92.60) and left out line 74 \"- 2026-07-03 IKEA $16.89\" (-16.89) and left out line 77 \"Jul 6 | IKEA | $180.34\" (-180.34)."
+      ]
+    },
+    {
+      "check_name": "duplicate-flagged",
+      "description": "The repeated Trader Joe's $54.12 entry on July 22 is flagged as a likely duplicate.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 5,
+      "errored_count": 0,
+      "pass_rate": 1.0,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": true,
+      "failure_reasons": []
+    },
+    {
+      "check_name": "both-delta-charges-kept",
+      "description": "Both Delta charges ($412.60 and $450.60) are counted; neither is mistaken for a duplicate.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 5,
+      "errored_count": 0,
+      "pass_rate": 1.0,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": true,
+      "failure_reasons": []
+    },
+    {
+      "check_name": "travel-august-total",
+      "description": "August travel is $1,655.92 (or $1,631.82 if the 8/16 Uber stays in transport).",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 3,
+      "errored_count": 0,
+      "pass_rate": 0.6,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": false,
+      "failure_reasons": [
+        "june-august-2026/run-04: [failed] reported 1767.41; expected 1655.92 or 1631.82 Likely cause: Travel 2026-08: reported 1,767.41, reference 1,655.92, a difference of +111.49 that no combination of up to 3 entries explains (a broader categorization difference or an arithmetic error).",
+        "june-august-2026/run-05: [failed] reported 1563.82; expected 1655.92 or 1631.82 Likely cause: Travel 2026-08: reported 1,563.82, reference 1,631.82 (under the accepted policy 'August 16 Uber in Transport'), a difference of -68.00. Explained by: left out line 169 \"Airport Parking - $68.00 (August 14)\" (-68.00)."
+      ]
+    },
+    {
+      "check_name": "uncategorized-entry-count",
+      "description": "All eight transfers and ATM withdrawals are left uncategorized.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 2,
+      "errored_count": 0,
+      "pass_rate": 0.4,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": false,
+      "failure_reasons": [
+        "june-august-2026/run-01: [failed] reported 6; expected 8",
+        "june-august-2026/run-02: [failed] reported 6; expected 8",
+        "june-august-2026/run-04: [failed] reported 7; expected 8"
+      ]
+    },
+    {
+      "check_name": "largest-increase-is-travel",
+      "description": "Travel is identified as the largest July-to-August increase.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 4,
+      "errored_count": 0,
+      "pass_rate": 0.8,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": true,
+      "failure_reasons": [
+        "june-august-2026/run-04: [failed] reported Transport & travel; expected travel"
+      ]
+    },
+    {
+      "check_name": "code-executed",
+      "description": "Totals were computed by running Python, not by mental arithmetic (read from the tool-call log).",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 5,
+      "errored_count": 0,
+      "pass_rate": 1.0,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": true,
+      "failure_reasons": []
+    },
+    {
+      "check_name": "ambiguous-entries-not-forced",
+      "description": "Transfers and ATM withdrawals are not forced into a spending category.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 5,
+      "errored_count": 0,
+      "pass_rate": 1.0,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": true,
+      "failure_reasons": []
+    },
+    {
+      "check_name": "tables-before-interpretation",
+      "description": "Computed tables appear before the interpretation.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 5,
+      "errored_count": 0,
+      "pass_rate": 1.0,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": true,
+      "failure_reasons": []
+    },
+    {
+      "check_name": "three-supported-findings",
+      "description": "Exactly three findings, each supported by the numbers.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 4,
+      "errored_count": 0,
+      "pass_rate": 0.8,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": true,
+      "failure_reasons": [
+        "june-august-2026/run-05: [failed] The answer states August travel as $1,563.82, but the reference gives $1,655.92 (or $1,631.82 if the 8/16 Uber is counted as transport). Its dining and shopping figures and its total match the reference, and it has three findings. Likely cause: Travel 2026-08: reported 1,563.82, reference 1,631.82 (under the accepted policy 'August 16 Uber in Transport'), a difference of -68.00. Explained by: left out line 169 \"Airport Parking - $68.00 (August 14)\" (-68.00)."
+      ]
+    },
+    {
+      "check_name": "no-invented-budgets",
+      "description": "Only the two stated budget targets are used.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 5,
+      "errored_count": 0,
+      "pass_rate": 1.0,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": true,
+      "failure_reasons": []
+    }
+  ],
+  "failure_causes": [
+    {
+      "cause_summary": "Travel 2026-08 (under the accepted policy 'August 16 Uber in Transport'): left out line 169 \"Airport Parking - $68.00 (August 14)\"",
+      "occurrence_labels": [
+        "robust-tables-first / june-august-2026/run-05 / travel-august-total",
+        "robust-tables-first / june-august-2026/run-05 / three-supported-findings"
+      ]
+    },
+    {
+      "cause_summary": "Shopping 2026-07: left out line 71 \"7/2/26 IKEA $92.60\"; left out line 74 \"- 2026-07-03 IKEA $16.89\"; left out line 77 \"Jul 6 | IKEA | $180.34\"",
+      "occurrence_labels": [
+        "robust-tables-first / june-august-2026/run-01 / shopping-july-total"
+      ]
+    },
+    {
+      "cause_summary": "Travel 2026-08: no combination of up to 3 entries explains the difference",
+      "occurrence_labels": [
+        "robust-tables-first / june-august-2026/run-04 / travel-august-total"
+      ]
+    }
+  ],
+  "passes_gate": false
+}

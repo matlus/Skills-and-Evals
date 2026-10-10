@@ -1,0 +1,30 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "dining_june_total",
+    "dining_july_total",
+    "dining_august_total",
+    "dining_august_budget_status",
+    "shopping_july_total",
+    "refund_treatment",
+    "duplicate_flagged",
+    "both_delta_charges_kept",
+    "travel_august_total",
+    "uncategorized_entry_count",
+    "largest_july_to_august_increase_category"
+  ],
+  "properties": {
+    "dining_june_total": { "type": ["string", "null"], "description": "Dining/eating out/coffee total for June as written in the answer, e.g. \"212.74\". null if not reported." },
+    "dining_july_total": { "type": ["string", "null"], "description": "Dining/eating out/coffee total for July. null if not reported." },
+    "dining_august_total": { "type": ["string", "null"], "description": "Dining/eating out/coffee total for August. null if not reported." },
+    "dining_august_budget_status": { "type": "string", "enum": ["over", "under", "not_stated"], "description": "What the answer says about August dining versus the dining budget." },
+    "shopping_july_total": { "type": ["string", "null"], "description": "Shopping total for July as reported. null if not reported." },
+    "refund_treatment": { "type": "string", "enum": ["netted_against_spending", "counted_as_purchase", "excluded", "not_mentioned"], "description": "How the answer treats the REI refund (-$68.00)." },
+    "duplicate_flagged": { "type": "boolean", "description": "true only if the answer explicitly identifies the repeated Trader Joe's $54.12 entry on July 22 as a likely duplicate." },
+    "both_delta_charges_kept": { "type": ["boolean", "null"], "description": "true if the answer counts both Delta Air Lines charges ($412.60 and $450.60); false if it drops or merges one; null if the answer gives no way to tell." },
+    "travel_august_total": { "type": ["string", "null"], "description": "Travel total for August as reported. null if the answer has no travel category or total." },
+    "uncategorized_entry_count": { "type": ["integer", "null"], "description": "How many transfer/ATM/Venmo/Zelle/PayPal entries the answer leaves uncategorized (flagged rather than assigned to a spending category). null if the answer does not make this determinable." },
+    "largest_july_to_august_increase_category": { "type": ["string", "null"], "description": "The category the answer identifies as having the largest increase from July to August. null if not stated." }
+  }
+}

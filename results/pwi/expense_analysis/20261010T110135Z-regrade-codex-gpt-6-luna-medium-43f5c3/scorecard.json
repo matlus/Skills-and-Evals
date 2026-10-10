@@ -1,0 +1,341 @@
+{
+  "eval_suite_name": "expense-analysis",
+  "coding_assistant": "codex",
+  "model_name": "gpt-6-luna",
+  "effort_level": "medium",
+  "repetitions": 5,
+  "scorecard_rows": [
+    {
+      "check_name": "dining-june-total",
+      "description": "June dining & coffee total is $212.74.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 2,
+      "errored_count": 0,
+      "pass_rate": 0.4,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": false,
+      "failure_reasons": [
+        "june-august-2026/run-01: [failed] reported 178.52; expected 212.74 Likely cause: Dining and coffee 2026-06: reported 178.52, reference 212.74, a difference of -34.22. Explained by: left out line 31 \"Local Coffee Co - 34.22 (2026-06-12)\" (-34.22).",
+        "june-august-2026/run-03: [failed] reported 221.99; expected 212.74 Likely cause: Dining and coffee 2026-06: reported 221.99, reference 212.74, a difference of +9.25. Explained by: counted line 55 \"6/24/26 Bowl-O-Rama 9.25\" (+9.25), which the reference puts in Entertainment.",
+        "june-august-2026/run-04: [failed] reported 221.99; expected 212.74 Likely cause: Dining and coffee 2026-06: reported 221.99, reference 212.74, a difference of +9.25. Explained by: counted line 55 \"6/24/26 Bowl-O-Rama 9.25\" (+9.25), which the reference puts in Entertainment."
+      ]
+    },
+    {
+      "check_name": "dining-july-total",
+      "description": "July dining & coffee total is $165.14.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 5,
+      "errored_count": 0,
+      "pass_rate": 1.0,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": true,
+      "failure_reasons": []
+    },
+    {
+      "check_name": "dining-august-total",
+      "description": "August dining & coffee total is $398.69.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 5,
+      "errored_count": 0,
+      "pass_rate": 1.0,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": true,
+      "failure_reasons": []
+    },
+    {
+      "check_name": "dining-august-over-budget",
+      "description": "August dining is reported as over the $260 target.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 5,
+      "errored_count": 0,
+      "pass_rate": 1.0,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": true,
+      "failure_reasons": []
+    },
+    {
+      "check_name": "refund-netted",
+      "description": "The -$68.00 REI refund reduces spending instead of adding to it.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 5,
+      "errored_count": 0,
+      "pass_rate": 1.0,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": true,
+      "failure_reasons": []
+    },
+    {
+      "check_name": "shopping-july-total",
+      "description": "July shopping is $756.72, which is only true when the refund is netted.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 0,
+      "errored_count": 0,
+      "pass_rate": 0.0,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": false,
+      "failure_reasons": [
+        "june-august-2026/run-01: [failed] reported 843.81; expected 756.72 Likely cause: Shopping 2026-07: reported 843.81, reference 756.72, a difference of +87.09 that no combination of up to 3 entries explains (a broader categorization difference or an arithmetic error).",
+        "june-august-2026/run-02: [failed] reported 828.82; expected 756.72 Likely cause: Shopping 2026-07: reported 828.82, reference 756.72, a difference of +72.10. Explained by: counted line 86 \"- Jul 7 CVS Pharmacy $26.14\" (+26.14), which the reference puts in Health and fitness and counted line 119 \"- 7/31 Walgreens $45.96\" (+45.96), which the reference puts in Health and fitness.",
+        "june-august-2026/run-03: [failed] reported 996.34; expected 756.72 Likely cause: Shopping 2026-07: reported 996.34, reference 756.72, a difference of +239.62 that no combination of up to 3 entries explains (a broader categorization difference or an arithmetic error).",
+        "june-august-2026/run-04: [failed] reported 964.82; expected 756.72 Likely cause: Shopping 2026-07: reported 964.82, reference 756.72, a difference of +208.10 that no combination of up to 3 entries explains (a broader categorization difference or an arithmetic error).",
+        "june-august-2026/run-05: [failed] reported 907.22; expected 756.72 Likely cause: Shopping 2026-07: reported 907.22, reference 756.72, a difference of +150.50 that no combination of up to 3 entries explains (a broader categorization difference or an arithmetic error)."
+      ]
+    },
+    {
+      "check_name": "duplicate-flagged",
+      "description": "The repeated Trader Joe's $54.12 entry on July 22 is flagged as a likely duplicate.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 5,
+      "errored_count": 0,
+      "pass_rate": 1.0,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": true,
+      "failure_reasons": []
+    },
+    {
+      "check_name": "both-delta-charges-kept",
+      "description": "Both Delta charges ($412.60 and $450.60) are counted; neither is mistaken for a duplicate.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 2,
+      "errored_count": 0,
+      "pass_rate": 0.4,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": false,
+      "failure_reasons": [
+        "june-august-2026/run-02: [failed] reported nothing; expected true",
+        "june-august-2026/run-03: [failed] reported nothing; expected true",
+        "june-august-2026/run-05: [failed] reported nothing; expected true"
+      ]
+    },
+    {
+      "check_name": "travel-august-total",
+      "description": "August travel is $1,655.92 (or $1,631.82 if the 8/16 Uber stays in transport).",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 0,
+      "errored_count": 0,
+      "pass_rate": 0.0,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": false,
+      "failure_reasons": [
+        "june-august-2026/run-01: [failed] reported 2131.45; expected 1655.92 or 1631.82 Likely cause: Travel 2026-08: reported 2,131.45, reference 1,655.92, a difference of +475.53 that no combination of up to 3 entries explains (a broader categorization difference or an arithmetic error).",
+        "june-august-2026/run-02: [failed] reported 1349.47; expected 1655.92 or 1631.82 Likely cause: Travel 2026-08: reported 1,349.47, reference 1,631.82 (under the accepted policy 'August 16 Uber in Transport'), a difference of -282.35. Explained by: left out line 169 \"Airport Parking - $68.00 (August 14)\" (-68.00) and left out line 171 \"Hertz Rental Car - 214.35 (8/15/26)\" (-214.35).",
+        "june-august-2026/run-03: [failed] reported 1767.41; expected 1655.92 or 1631.82 Likely cause: Travel 2026-08: reported 1,767.41, reference 1,655.92, a difference of +111.49 that no combination of up to 3 entries explains (a broader categorization difference or an arithmetic error).",
+        "june-august-2026/run-04: [failed] reported 2194.40; expected 1655.92 or 1631.82 Likely cause: Travel 2026-08: reported 2,194.40, reference 1,655.92, a difference of +538.48 that no combination of up to 3 entries explains (a broader categorization difference or an arithmetic error).",
+        "june-august-2026/run-05: [failed] reported 1767.41; expected 1655.92 or 1631.82 Likely cause: Travel 2026-08: reported 1,767.41, reference 1,655.92, a difference of +111.49 that no combination of up to 3 entries explains (a broader categorization difference or an arithmetic error)."
+      ]
+    },
+    {
+      "check_name": "uncategorized-entry-count",
+      "description": "All eight transfers and ATM withdrawals are left uncategorized.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 4,
+      "errored_count": 0,
+      "pass_rate": 0.8,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": true,
+      "failure_reasons": [
+        "june-august-2026/run-05: [failed] reported 7; expected 8"
+      ]
+    },
+    {
+      "check_name": "largest-increase-is-travel",
+      "description": "Travel is identified as the largest July-to-August increase.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 2,
+      "errored_count": 0,
+      "pass_rate": 0.4,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": false,
+      "failure_reasons": [
+        "june-august-2026/run-01: [failed] reported Transport / travel; expected travel",
+        "june-august-2026/run-03: [failed] reported Transport: parking/travel; expected travel",
+        "june-august-2026/run-04: [failed] reported Transport / travel; expected travel"
+      ]
+    },
+    {
+      "check_name": "code-executed",
+      "description": "Totals were computed by running Python, not by mental arithmetic (read from the tool-call log).",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 5,
+      "errored_count": 0,
+      "pass_rate": 1.0,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": true,
+      "failure_reasons": []
+    },
+    {
+      "check_name": "ambiguous-entries-not-forced",
+      "description": "Transfers and ATM withdrawals are not forced into a spending category.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 5,
+      "errored_count": 0,
+      "pass_rate": 1.0,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": true,
+      "failure_reasons": []
+    },
+    {
+      "check_name": "tables-before-interpretation",
+      "description": "Computed tables appear before the interpretation.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 5,
+      "errored_count": 0,
+      "pass_rate": 1.0,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": true,
+      "failure_reasons": []
+    },
+    {
+      "check_name": "three-supported-findings",
+      "description": "Exactly three findings, each supported by the numbers.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 0,
+      "errored_count": 0,
+      "pass_rate": 0.0,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": false,
+      "failure_reasons": [
+        "june-august-2026/run-01: [failed] The answer's figures contradict the reference values. June dining is $178.52 against a reference of $212.74. Shopping is $1,128.30 / $843.81 / $1,247.07 against references of $960.07–$1,068.35 for June, $756.72 for July, and $1,061.93–$1,218.31 for August. Its finding that August shopping is $47.07 over target also conflicts with the references (at most $18.31 over, or under target). Likely cause: Dining and coffee 2026-06: reported 178.52, reference 212.74, a difference of -34.22. Explained by: left out line 31 \"Local Coffee Co - 34.22 (2026-06-12)\" (-34.22). Likely cause: Shopping 2026-06: reported 1,128.30, reference 1,020.77 (under the accepted policy 'Barnes & Noble in Shopping'), a difference of +107.53. Explained by: counted line 6 \"June 1 Amazon Prime $14.99\" (+14.99), which the reference puts in Subscriptions and counted line 63 \"Walgreens, 6/28 -- $92.54\" (+92.54), which the reference puts in Health and fitness. Likely cause: Shopping 2026-07: reported 843.81, reference 756.72, a difference of +87.09 that no combination of up to 3 entries explains (a broader categorization difference or an arithmetic error). Likely cause: Shopping 2026-08: reported 1,247.07, reference 1,218.31 (under the accepted policy 'Barnes & Noble in Shopping'), a difference of +28.76. Explained by: counted line 128 \"Amazon Prime (08-03) - $14.99\" (+14.99), which the reference puts in Subscriptions and counted line 166 \"Walgreens - $13.77 (08-14)\" (+13.77), which the reference puts in Health and fitness.",
+        "june-august-2026/run-02: [failed] The answer gives exactly three findings. Its Travel figure for August ($1,349.47) contradicts the reference ($1,655.92, or $1,631.82 with the Uber counted as transport). Its Shopping figures also match no reference policy. August is $1,232.08 against a reference of $1,061.93 or $1,218.31, and June is $1,113.31 against $960.07, $1,020.77, $1,007.65 or $1,068.35. Likely cause: Travel 2026-08: reported 1,349.47, reference 1,631.82 (under the accepted policy 'August 16 Uber in Transport'), a difference of -282.35. Explained by: left out line 169 \"Airport Parking - $68.00 (August 14)\" (-68.00) and left out line 171 \"Hertz Rental Car - 214.35 (8/15/26)\" (-214.35). Likely cause: Shopping 2026-08: reported 1,232.08, reference 1,218.31 (under the accepted policy 'Barnes & Noble in Shopping'), a difference of +13.77. Explained by: counted line 166 \"Walgreens - $13.77 (08-14)\" (+13.77), which the reference puts in Health and fitness. Likely cause: Shopping 2026-06: reported 1,113.31, reference 1,020.77 (under the accepted policy 'Barnes & Noble in Shopping'), a difference of +92.54. Explained by: counted line 63 \"Walgreens, 6/28 -- $92.54\" (+92.54), which the reference puts in Health and fitness.",
+        "june-august-2026/run-03: [failed] The answer's figures contradict the reference values. June dining is $221.99 against $212.74. Shopping is $1,232.66 in June and $1,638.99 in August, so it claims shopping was over target in June and by $438.99 in August. Under either policy June shopping is under target and August is at most $18.31 over. Likely cause: Dining and coffee 2026-06: reported 221.99, reference 212.74, a difference of +9.25. Explained by: counted line 55 \"6/24/26 Bowl-O-Rama 9.25\" (+9.25), which the reference puts in Entertainment. Likely cause: Shopping 2026-06: reported 1,232.66, reference 960.07, a difference of +272.59 that no combination of up to 3 entries explains (a broader categorization difference or an arithmetic error). Likely cause: Shopping 2026-08: reported 1,638.99, reference 1,061.93, a difference of +577.06 that no combination of up to 3 entries explains (a broader categorization difference or an arithmetic error). Likely cause: Travel 2026-08: reported 1,767.41, reference 1,655.92, a difference of +111.49 that no combination of up to 3 entries explains (a broader categorization difference or an arithmetic error).",
+        "june-august-2026/run-04: [failed] The answer has three findings, but its numbers contradict the reference. June dining is $221.99 against a reference of $212.74. Shopping is $1,113.31, $964.82 and $1,232.08, and no reference policy gives those. Its claim that August shopping is $32.08 over target also conflicts with the reference, which says shopping is under target or at most $18.31 over. Likely cause: Dining and coffee 2026-06: reported 221.99, reference 212.74, a difference of +9.25. Explained by: counted line 55 \"6/24/26 Bowl-O-Rama 9.25\" (+9.25), which the reference puts in Entertainment. Likely cause: Shopping 2026-07: reported 964.82, reference 756.72, a difference of +208.10 that no combination of up to 3 entries explains (a broader categorization difference or an arithmetic error). Likely cause: Shopping 2026-06: reported 1,113.31, reference 1,020.77 (under the accepted policy 'Barnes & Noble in Shopping'), a difference of +92.54. Explained by: counted line 63 \"Walgreens, 6/28 -- $92.54\" (+92.54), which the reference puts in Health and fitness. Likely cause: Shopping 2026-08: reported 1,232.08, reference 1,218.31 (under the accepted policy 'Barnes & Noble in Shopping'), a difference of +13.77. Explained by: counted line 166 \"Walgreens - $13.77 (08-14)\" (+13.77), which the reference puts in Health and fitness.",
+        "june-august-2026/run-05: [failed] The Travel finding says July was $99.08 and August was $1,767.41, with a $1,668.33 increase. The reference has Travel at $0 in July and $1,655.92 in August ($1,631.82 if the Uber is counted as transport). The answer's Travel category (June $327.78) also contradicts the reference's $0 for June. Likely cause: Travel 2026-08: reported 1,767.41, reference 1,655.92, a difference of +111.49 that no combination of up to 3 entries explains (a broader categorization difference or an arithmetic error)."
+      ]
+    },
+    {
+      "check_name": "no-invented-budgets",
+      "description": "Only the two stated budget targets are used.",
+      "variant_name": "robust-tables-first",
+      "trial_count": 5,
+      "passed_count": 5,
+      "errored_count": 0,
+      "pass_rate": 1.0,
+      "minimum_pass_rate": 0.8,
+      "is_gated": true,
+      "meets_minimum_pass_rate": true,
+      "failure_reasons": []
+    }
+  ],
+  "failure_causes": [
+    {
+      "cause_summary": "Shopping 2026-07: no combination of up to 3 entries explains the difference",
+      "occurrence_labels": [
+        "robust-tables-first / june-august-2026/run-01 / shopping-july-total",
+        "robust-tables-first / june-august-2026/run-01 / three-supported-findings",
+        "robust-tables-first / june-august-2026/run-03 / shopping-july-total",
+        "robust-tables-first / june-august-2026/run-04 / shopping-july-total",
+        "robust-tables-first / june-august-2026/run-04 / three-supported-findings",
+        "robust-tables-first / june-august-2026/run-05 / shopping-july-total"
+      ]
+    },
+    {
+      "cause_summary": "Travel 2026-08: no combination of up to 3 entries explains the difference",
+      "occurrence_labels": [
+        "robust-tables-first / june-august-2026/run-01 / travel-august-total",
+        "robust-tables-first / june-august-2026/run-03 / travel-august-total",
+        "robust-tables-first / june-august-2026/run-03 / three-supported-findings",
+        "robust-tables-first / june-august-2026/run-04 / travel-august-total",
+        "robust-tables-first / june-august-2026/run-05 / travel-august-total",
+        "robust-tables-first / june-august-2026/run-05 / three-supported-findings"
+      ]
+    },
+    {
+      "cause_summary": "Dining and coffee 2026-06: counted line 55 \"6/24/26 Bowl-O-Rama 9.25\", which the reference puts in Entertainment",
+      "occurrence_labels": [
+        "robust-tables-first / june-august-2026/run-03 / dining-june-total",
+        "robust-tables-first / june-august-2026/run-03 / three-supported-findings",
+        "robust-tables-first / june-august-2026/run-04 / dining-june-total",
+        "robust-tables-first / june-august-2026/run-04 / three-supported-findings"
+      ]
+    },
+    {
+      "cause_summary": "Dining and coffee 2026-06: left out line 31 \"Local Coffee Co - 34.22 (2026-06-12)\"",
+      "occurrence_labels": [
+        "robust-tables-first / june-august-2026/run-01 / dining-june-total",
+        "robust-tables-first / june-august-2026/run-01 / three-supported-findings"
+      ]
+    },
+    {
+      "cause_summary": "Travel 2026-08 (under the accepted policy 'August 16 Uber in Transport'): left out line 169 \"Airport Parking - $68.00 (August 14)\"; left out line 171 \"Hertz Rental Car - 214.35 (8/15/26)\"",
+      "occurrence_labels": [
+        "robust-tables-first / june-august-2026/run-02 / travel-august-total",
+        "robust-tables-first / june-august-2026/run-02 / three-supported-findings"
+      ]
+    },
+    {
+      "cause_summary": "Shopping 2026-08 (under the accepted policy 'Barnes & Noble in Shopping'): counted line 166 \"Walgreens - $13.77 (08-14)\", which the reference puts in Health and fitness",
+      "occurrence_labels": [
+        "robust-tables-first / june-august-2026/run-02 / three-supported-findings",
+        "robust-tables-first / june-august-2026/run-04 / three-supported-findings"
+      ]
+    },
+    {
+      "cause_summary": "Shopping 2026-06 (under the accepted policy 'Barnes & Noble in Shopping'): counted line 63 \"Walgreens, 6/28 -- $92.54\", which the reference puts in Health and fitness",
+      "occurrence_labels": [
+        "robust-tables-first / june-august-2026/run-02 / three-supported-findings",
+        "robust-tables-first / june-august-2026/run-04 / three-supported-findings"
+      ]
+    },
+    {
+      "cause_summary": "Shopping 2026-06 (under the accepted policy 'Barnes & Noble in Shopping'): counted line 6 \"June 1 Amazon Prime $14.99\", which the reference puts in Subscriptions; counted line 63 \"Walgreens, 6/28 -- $92.54\", which the reference puts in Health and fitness",
+      "occurrence_labels": [
+        "robust-tables-first / june-august-2026/run-01 / three-supported-findings"
+      ]
+    },
+    {
+      "cause_summary": "Shopping 2026-08 (under the accepted policy 'Barnes & Noble in Shopping'): counted line 128 \"Amazon Prime (08-03) - $14.99\", which the reference puts in Subscriptions; counted line 166 \"Walgreens - $13.77 (08-14)\", which the reference puts in Health and fitness",
+      "occurrence_labels": [
+        "robust-tables-first / june-august-2026/run-01 / three-supported-findings"
+      ]
+    },
+    {
+      "cause_summary": "Shopping 2026-07: counted line 86 \"- Jul 7 CVS Pharmacy $26.14\", which the reference puts in Health and fitness; counted line 119 \"- 7/31 Walgreens $45.96\", which the reference puts in Health and fitness",
+      "occurrence_labels": [
+        "robust-tables-first / june-august-2026/run-02 / shopping-july-total"
+      ]
+    },
+    {
+      "cause_summary": "Shopping 2026-06: no combination of up to 3 entries explains the difference",
+      "occurrence_labels": [
+        "robust-tables-first / june-august-2026/run-03 / three-supported-findings"
+      ]
+    },
+    {
+      "cause_summary": "Shopping 2026-08: no combination of up to 3 entries explains the difference",
+      "occurrence_labels": [
+        "robust-tables-first / june-august-2026/run-03 / three-supported-findings"
+      ]
+    }
+  ],
+  "passes_gate": false
+}
