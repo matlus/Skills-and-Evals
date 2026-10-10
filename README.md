@@ -65,7 +65,7 @@ Three prompt variants are compared in `evals/expense_analysis/prompts/`:
 - `robust_tables_first.md`: `robust` with an explicit reply order, tables first, added after `robust` kept leading with conclusions.
   It is the **gated** variant: its pass rates decide whether a run passes.
 
-The expected answers come from an independently computed reference key. It accepts more than one answer where the
+The expected answers come from an independently computed reference key ([`expense_reference_key.md`](evals/expense_analysis/cases/june_august_2026/expense_reference_key.md)). It accepts more than one answer where the
 input supports more than one reasonable policy (for example, books may be Entertainment or Shopping), as long as the
 answer discloses the policy it used.
 
@@ -320,6 +320,9 @@ Start with the minimal file. Everything in the library exists in it in some form
 
 - `prompts/*.md`: the prompt variants.
 - `cases/june_august_2026/inputs/`: the expense log and budget notes the model receives.
+- `cases/june_august_2026/expense_reference_key.md`: the reference key itself, for people: conventions, monthly totals, budget
+  comparisons, the alternative policies it accepts, and how to grade. Its links point to the author's private copies of
+  the inputs and its calculation package, which are not part of this repository; the inputs are in `inputs/`.
 - `cases/june_august_2026/expected_facts.json`: the reference key's answers. Each fact lists every value the key accepts.
 - `cases/june_august_2026/reference_ledger.json`: the same key, entry by entry, used to explain wrong totals (optional for other suites).
 - `grading/fact_extraction_*.{md,json}`: what the extractor model reads out of each answer.
