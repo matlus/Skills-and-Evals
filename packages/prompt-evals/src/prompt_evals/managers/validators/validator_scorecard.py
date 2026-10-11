@@ -3,19 +3,21 @@ from itertools import groupby
 from typing import final
 
 from prompt_evals.managers.exceptions.scorecard_exceptions import ScorecardValidationException
-from prompt_evals.managers.models.scorecard_models import Scorecard, ScorecardRow
+from prompt_evals.managers.models.scorecard_models import DurationSummary, Scorecard, ScorecardRow
 
 
 @final
 class ValidatorScorecard:
     """The layout the report renderer relies on: one consecutive group of rows per check, every group listing the same
-    variants in the same order, and rates between 0 and 1. A scorecard from run_evaluation always has it."""
+    variants in the same order, rates between 0 and 1, and times of zero seconds or more. A scorecard from run_evaluation
+    always has it."""
 
     @staticmethod
     def validate(scorecard: Scorecard) -> None:
         validation_problems: list[str] = [
             *ValidatorScorecard._find_rate_problems(scorecard),
             *ValidatorScorecard._find_layout_problems(scorecard),
+            *ValidatorScorecard._find_timing_problems(scorecard),
         ]
         if validation_problems:
             raise ScorecardValidationException(validation_problems)
@@ -27,6 +29,30 @@ class ValidatorScorecard:
             for scorecard_row in scorecard.scorecard_rows
             for rate_name, rate_value in (("pass_rate", scorecard_row.pass_rate), ("minimum_pass_rate", scorecard_row.minimum_pass_rate))
             if not math.isfinite(rate_value) or not 0 <= rate_value <= 1
+        ]
+
+    @staticmethod
+    def _find_timing_problems(scorecard: Scorecard) -> list[str]:
+        return [
+            f"variant '{variant_timing.variant_name}' has a {summary_name} {seconds_name} of {seconds_value} (expected zero or more)"
+            for variant_timing in scorecard.scorecard_timing.variant_timings
+            for summary_name, duration_summary in (
+                ("answer time", variant_timing.answer_duration_summary),
+                ("grading time", variant_timing.grading_duration_summary),
+                ("total time", variant_timing.total_duration_summary),
+            )
+            for seconds_name, seconds_value in ValidatorScorecard._list_summary_seconds(duration_summary)
+            if not math.isfinite(seconds_value) or seconds_value < 0
+        ]
+
+    @staticmethod
+    def _list_summary_seconds(duration_summary: DurationSummary | None) -> list[tuple[str, float]]:
+        if duration_summary is None:
+            return []
+        return [
+            ("median", duration_summary.median_seconds),
+            ("minimum", duration_summary.minimum_seconds),
+            ("maximum", duration_summary.maximum_seconds),
         ]
 
     @staticmethod

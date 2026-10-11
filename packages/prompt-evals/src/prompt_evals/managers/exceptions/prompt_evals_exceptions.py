@@ -4,7 +4,7 @@ from typing import Final
 type ContextualDataDict = dict[str, str | int | float | bool]
 
 
-class PromptEvalsExceptionBase(Exception, ABC):
+class PromptEvalsBaseException(Exception, ABC):
     """Root of the prompt-evals exception taxonomy. Only leaf exceptions are raised."""
 
     APPLICATION_NAME: Final[str] = "PromptEvals"
@@ -28,9 +28,9 @@ class PromptEvalsExceptionBase(Exception, ABC):
         return contextual_data_by_name
 
 
-class PromptEvalsBusinessExceptionBase(PromptEvalsExceptionBase, ABC):
+class PromptEvalsBusinessBaseException(PromptEvalsBaseException, ABC):
     """The caller must fix something they supplied: the evaluation request or the eval suite definition."""
 
 
-class PromptEvalsTechnicalExceptionBase(PromptEvalsExceptionBase, ABC):
+class PromptEvalsTechnicalBaseException(PromptEvalsBaseException, ABC):
     """The environment must be fixed: the coding-assistant CLI, configuration, or the host's artifact storage."""

@@ -4,7 +4,7 @@ from typing import final
 from prompt_evals.managers.models.eval_suite_models import CheckDefinition, EvalSuite
 from prompt_evals.managers.models.evaluation_models import TrialRunDescription
 from prompt_evals.managers.models.grading_models import CheckOutcome, CheckStatus, TrialGrade
-from prompt_evals.managers.models.scorecard_models import FailureCause, Scorecard, ScorecardRow
+from prompt_evals.managers.models.scorecard_models import FailureCause, Scorecard, ScorecardRow, ScorecardTiming
 
 
 @final
@@ -12,7 +12,9 @@ class ScorecardAggregationProcessor:
     """Turns per-trial outcomes into pass rates: one row per check per graded prompt variant."""
 
     @staticmethod
-    def aggregate_scorecard(eval_suite: EvalSuite, trial_run_description: TrialRunDescription, trial_grades: tuple[TrialGrade, ...]) -> Scorecard:
+    def aggregate_scorecard(
+        eval_suite: EvalSuite, trial_run_description: TrialRunDescription, trial_grades: tuple[TrialGrade, ...], scorecard_timing: ScorecardTiming
+    ) -> Scorecard:
         scorecard_rows: tuple[ScorecardRow, ...] = ScorecardAggregationProcessor._build_scorecard_rows(eval_suite, trial_grades)
         return Scorecard(
             eval_suite_name=eval_suite.eval_suite_name,
@@ -22,6 +24,7 @@ class ScorecardAggregationProcessor:
             repetitions=trial_run_description.repetitions,
             scorecard_rows=scorecard_rows,
             failure_causes=ScorecardAggregationProcessor._group_failure_causes(trial_grades),
+            scorecard_timing=scorecard_timing,
             passes_gate=ScorecardAggregationProcessor._decide_gate(scorecard_rows),
         )
 

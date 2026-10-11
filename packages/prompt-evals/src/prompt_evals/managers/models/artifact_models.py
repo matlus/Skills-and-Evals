@@ -9,6 +9,7 @@ class EvaluationArtifactType(StrEnum):
     TRIAL_EVENT_STREAM = "trial_event_stream"
     TRIAL_ANSWER = "trial_answer"
     TRIAL_ERROR = "trial_error"
+    TRIAL_TIMING = "trial_timing"
     TRIAL_GRADE = "trial_grade"
     SCORECARD = "scorecard"
     SCORECARD_REPORT = "scorecard_report"
@@ -22,6 +23,8 @@ class EvaluationArtifactType(StrEnum):
                 return "answer"
             case EvaluationArtifactType.TRIAL_ERROR:
                 return "error"
+            case EvaluationArtifactType.TRIAL_TIMING:
+                return "timing"
             case EvaluationArtifactType.TRIAL_GRADE:
                 return "grade"
             case EvaluationArtifactType.SCORECARD | EvaluationArtifactType.SCORECARD_REPORT:
@@ -36,7 +39,7 @@ class EvaluationArtifactType(StrEnum):
                 return "md"
             case EvaluationArtifactType.TRIAL_ERROR:
                 return "txt"
-            case EvaluationArtifactType.TRIAL_GRADE | EvaluationArtifactType.SCORECARD:
+            case EvaluationArtifactType.TRIAL_TIMING | EvaluationArtifactType.TRIAL_GRADE | EvaluationArtifactType.SCORECARD:
                 return "json"
 
     @property
@@ -48,7 +51,7 @@ class EvaluationArtifactType(StrEnum):
                 return "text/markdown"
             case EvaluationArtifactType.TRIAL_ERROR:
                 return "text/plain"
-            case EvaluationArtifactType.TRIAL_GRADE | EvaluationArtifactType.SCORECARD:
+            case EvaluationArtifactType.TRIAL_TIMING | EvaluationArtifactType.TRIAL_GRADE | EvaluationArtifactType.SCORECARD:
                 return "application/json"
 
 

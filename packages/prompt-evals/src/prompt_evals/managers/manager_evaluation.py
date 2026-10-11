@@ -13,10 +13,11 @@ from prompt_evals.managers.models.eval_suite_models import EvalSuite
 from prompt_evals.managers.models.evaluation_models import EvaluationRequest, TrialRunDescription
 from prompt_evals.managers.models.grading_models import TrialGrade
 from prompt_evals.managers.models.regrade_models import RegradeRequest
-from prompt_evals.managers.models.scorecard_models import Scorecard
+from prompt_evals.managers.models.scorecard_models import Scorecard, ScorecardTiming
 from prompt_evals.managers.models.trial_models import TrialRecord
 from prompt_evals.managers.processors.scorecard_aggregation_processor import ScorecardAggregationProcessor
 from prompt_evals.managers.processors.scorecard_report_rendering_processor import ScorecardReportRenderingProcessor
+from prompt_evals.managers.processors.scorecard_timing_processor import ScorecardTimingProcessor
 from prompt_evals.managers.service_locators.service_locator_base import ServiceLocatorBase
 from prompt_evals.managers.validators.validator_evaluation_request import ValidatorEvaluationRequest
 from prompt_evals.managers.validators.validator_scorecard import ValidatorScorecard
@@ -99,7 +100,8 @@ class ManagerEvaluation:
         )
         EvaluationArtifactEmitter.emit_trial_grades(evaluation_artifact_callback, trial_grades)
 
-        scorecard: Scorecard = ScorecardAggregationProcessor.aggregate_scorecard(eval_suite, trial_run_description, trial_grades)
+        scorecard_timing: ScorecardTiming = ScorecardTimingProcessor.summarize_timing(eval_suite, trial_records, trial_grades)
+        scorecard: Scorecard = ScorecardAggregationProcessor.aggregate_scorecard(eval_suite, trial_run_description, trial_grades, scorecard_timing)
         EvaluationArtifactEmitter.emit_scorecard(
             evaluation_artifact_callback, scorecard, ScorecardReportRenderingProcessor.render_scorecard_report(scorecard)
         )

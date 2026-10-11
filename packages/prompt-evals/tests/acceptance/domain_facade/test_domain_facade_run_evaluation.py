@@ -49,6 +49,7 @@ from prompt_evals import (
     CodingAssistant,
     ConfigurationSettingException,
     DomainFacade,
+    DurationSummary,
     EffortLevel,
     EvalSuiteDefinitionInvalidException,
     EvalSuiteNotFoundException,
@@ -59,8 +60,10 @@ from prompt_evals import (
     LlmCliStartFailedException,
     Scorecard,
     ScorecardRow,
+    ScorecardTiming,
     ScorecardValidationException,
     TrialIdentity,
+    VariantTiming,
 )
 
 BASELINE_PROMPT_MARKER: Final[str] = "Baseline prompt."
@@ -230,6 +233,7 @@ class TestRunEvaluationExpectedPaths:
             for artifact_type, filename_suffix, content_type in (
                 (EvaluationArtifactType.TRIAL_EVENT_STREAM, "event_stream.jsonl", "application/x-ndjson"),
                 (EvaluationArtifactType.TRIAL_ANSWER, "answer.md", "text/markdown"),
+                (EvaluationArtifactType.TRIAL_TIMING, "timing.json", "application/json"),
                 (EvaluationArtifactType.TRIAL_GRADE, "grade.json", "application/json"),
             )
         }
@@ -1095,12 +1099,15 @@ class TestRunEvaluationInvalidInput:
 
 @pytest.mark.acceptance
 class TestRenderScorecardReportInvalidInput:
-    def test_RenderScorecardReport_WhenRowsAreOutOfLayoutOrRatesOutOfRange_ThenScorecardValidationExceptionReportsEveryProblem(self) -> None:
+    def test_RenderScorecardReport_WhenRowsAreOutOfLayoutOrRatesOrTimesOutOfRange_ThenScorecardValidationExceptionReportsEveryProblem(
+        self,
+    ) -> None:
         # Arrange
         domain_facade: DomainFacade = create_domain_facade(
             TestMediatorCodingAssistantCli(), create_override_by_environment_variable_name(create_random_grader_model_name())
         )
         out_of_range_pass_rate: float = 1.5
+        negative_seconds: float = -1.0
 
         def create_scorecard_row(check_name: str, variant_name: str, pass_rate: float) -> ScorecardRow:
             return ScorecardRow(
@@ -1130,14 +1137,30 @@ class TestRenderScorecardReportInvalidInput:
                 create_scorecard_row(TOTAL_AMOUNT_CHECK_NAME, BASELINE_VARIANT_NAME, 1.0),
             ),
             failure_causes=(),
+            scorecard_timing=ScorecardTiming(
+                variant_timings=(
+                    VariantTiming(
+                        variant_name=CANDIDATE_VARIANT_NAME,
+                        is_gated=True,
+                        trial_count=1,
+                        answer_duration_summary=None,
+                        grading_duration_summary=DurationSummary(
+                            median_seconds=1.0, minimum_seconds=negative_seconds, maximum_seconds=1.0, measured_trial_count=1
+                        ),
+                        total_duration_summary=None,
+                    ),
+                ),
+                trial_timings=(),
+            ),
             passes_gate=True,
         )
         expected_message_phrases: tuple[str, ...] = (
             f"row '{TOTAL_AMOUNT_CHECK_NAME}' / '{CANDIDATE_VARIANT_NAME}' has a pass_rate of {out_of_range_pass_rate}",
             f"the rows of check '{TOTAL_AMOUNT_CHECK_NAME}' are not consecutive",
             f"check '{STATUS_VALUE_CHECK_NAME}' lists variants ['{CANDIDATE_VARIANT_NAME}']",
+            f"variant '{CANDIDATE_VARIANT_NAME}' has a grading time minimum of {negative_seconds}",
         )
-        expected_contextual_entries_by_name: dict[str, object] = {VALIDATION_PROBLEM_COUNT_ENTRY_NAME: 4}
+        expected_contextual_entries_by_name: dict[str, object] = {VALIDATION_PROBLEM_COUNT_ENTRY_NAME: 5}
 
         # Act
         with pytest.raises(ScorecardValidationException) as exception_info:

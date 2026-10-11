@@ -1,4 +1,5 @@
 import json
+import math
 import re
 from pathlib import Path
 from typing import Final
@@ -6,7 +7,7 @@ from typing import Final
 import pytest
 
 from prompt_evals import CodingAssistant, EffortLevel, RecordedCompletedTrial, TrialIdentity
-from prompt_evals_app.recorded_run_reader import RecordedRun, RecordedRunReader, RecordedRunUnreadableError
+from prompt_evals_app.recorded_run_reader import RecordedRun, RecordedRunReader, RecordedRunUnreadableException
 
 INVALID_UTF8_BYTES: Final[bytes] = b"\xff\xfe\xfa"
 TRIAL_DIRECTORY_PARTS: Final[tuple[str, ...]] = ("trials", "standard", "refund", "run-07")
@@ -49,7 +50,7 @@ class TestRecordedRunReader:
         (trial_directory / "event_stream.jsonl").write_bytes(INVALID_UTF8_BYTES)
 
         # Act / Assert
-        with pytest.raises(RecordedRunUnreadableError, match=re.escape("event_stream.jsonl cannot be read")):
+        with pytest.raises(RecordedRunUnreadableException, match=re.escape("event_stream.jsonl cannot be read")):
             RecordedRunReader.read_recorded_run(tmp_path, CodingAssistant.CLAUDE_CODE)
 
     def test_ReadRecordedRun_WhenScorecardIsNotUtf8_ThenRunIsUnreadable(self, tmp_path: Path) -> None:
@@ -58,7 +59,7 @@ class TestRecordedRunReader:
         (tmp_path / "scorecard.json").write_bytes(INVALID_UTF8_BYTES)
 
         # Act / Assert
-        with pytest.raises(RecordedRunUnreadableError, match=re.escape("scorecard.json cannot be read")):
+        with pytest.raises(RecordedRunUnreadableException, match=re.escape("scorecard.json cannot be read")):
             RecordedRunReader.read_recorded_run(tmp_path, CodingAssistant.CLAUDE_CODE)
 
     def test_ReadRecordedRun_WhenEffortLevelIsNotAString_ThenMessageNamesOnlyThatField(self, tmp_path: Path) -> None:
@@ -68,7 +69,7 @@ class TestRecordedRunReader:
         write_run_directory(tmp_path, scorecard_object)
 
         # Act
-        with pytest.raises(RecordedRunUnreadableError) as raised_error:
+        with pytest.raises(RecordedRunUnreadableException) as raised_error:
             RecordedRunReader.read_recorded_run(tmp_path, CodingAssistant.CLAUDE_CODE)
 
         # Assert
@@ -86,7 +87,7 @@ class TestRecordedRunReader:
         write_run_directory(tmp_path, scorecard_object)
 
         # Act
-        with pytest.raises(RecordedRunUnreadableError) as raised_error:
+        with pytest.raises(RecordedRunUnreadableException) as raised_error:
             RecordedRunReader.read_recorded_run(tmp_path, CodingAssistant.CLAUDE_CODE)
 
         # Assert
@@ -96,3 +97,44 @@ class TestRecordedRunReader:
         assert not missing_effort_levels, (
             f"expected the message to list every known effort level; missing {missing_effort_levels} in {actual_message!r}"
         )
+
+    def test_ReadRecordedRun_WhenTheTrialSavedAnAnswerTime_ThenTheRecordedTrialCarriesIt(self, tmp_path: Path) -> None:
+        # Arrange
+        trial_directory: Path = write_run_directory(tmp_path, create_valid_scorecard_object())
+        expected_answer_duration_seconds: float = 93.25
+        (trial_directory / "timing.json").write_text(json.dumps({"answer_duration_seconds": expected_answer_duration_seconds}), encoding="utf-8")
+
+        # Act
+        actual_recorded_run: RecordedRun = RecordedRunReader.read_recorded_run(tmp_path, CodingAssistant.CLAUDE_CODE)
+
+        # Assert
+        actual_answer_duration_seconds: float | None = actual_recorded_run.recorded_trials[0].answer_duration_seconds
+        assert actual_answer_duration_seconds == expected_answer_duration_seconds, (
+            f"expected {expected_answer_duration_seconds}s from timing.json; actual {actual_answer_duration_seconds}"
+        )
+
+    def test_ReadRecordedRun_WhenTheTrialSavedNoTimingFile_ThenItsAnswerTimeIsUnknown(self, tmp_path: Path) -> None:
+        # Arrange
+        write_run_directory(tmp_path, create_valid_scorecard_object())
+
+        # Act
+        actual_recorded_run: RecordedRun = RecordedRunReader.read_recorded_run(tmp_path, CodingAssistant.CLAUDE_CODE)
+
+        # Assert
+        actual_answer_duration_seconds: float | None = actual_recorded_run.recorded_trials[0].answer_duration_seconds
+        assert actual_answer_duration_seconds is None, f"expected no answer time without timing.json; actual {actual_answer_duration_seconds}"
+
+    @pytest.mark.parametrize("invalid_answer_duration", [-1, True, "12", math.nan, math.inf, 10**400])
+    def test_ReadRecordedRun_WhenTheSavedAnswerTimeIsNotASecondsCount_ThenRunIsUnreadable(
+        self, tmp_path: Path, invalid_answer_duration: object
+    ) -> None:
+        # Arrange
+        trial_directory: Path = write_run_directory(tmp_path, create_valid_scorecard_object())
+        (trial_directory / "timing.json").write_text(json.dumps({"answer_duration_seconds": invalid_answer_duration}), encoding="utf-8")
+
+        # Act / Assert
+        with pytest.raises(
+            RecordedRunUnreadableException,
+            match=re.escape("must hold a finite number of seconds of zero or more, or null, for answer_duration_seconds"),
+        ):
+            RecordedRunReader.read_recorded_run(tmp_path, CodingAssistant.CLAUDE_CODE)

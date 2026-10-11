@@ -7,6 +7,7 @@ from prompt_evals.managers.artifact_emitters.artifact_document_models import (
     CheckOutcomeDocument,
     EntryMistakeDocument,
     TrialGradeDocument,
+    TrialTimingDocument,
 )
 from prompt_evals.managers.exceptions.artifact_exceptions import ArtifactCallbackException
 from prompt_evals.managers.models.artifact_models import EvaluationArtifact, EvaluationArtifactCallback, EvaluationArtifactType
@@ -67,6 +68,16 @@ class EvaluationArtifactEmitter:
                 )
             case ErroredTrial(trial_identity=trial_identity, error_description=error_description):
                 EvaluationArtifactEmitter._emit(evaluation_artifact_callback, EvaluationArtifactType.TRIAL_ERROR, trial_identity, error_description)
+        EvaluationArtifactEmitter._emit(
+            evaluation_artifact_callback,
+            EvaluationArtifactType.TRIAL_TIMING,
+            trial_record.trial_identity,
+            EvaluationArtifactEmitter._serialize_trial_timing(trial_record),
+        )
+
+    @staticmethod
+    def _serialize_trial_timing(trial_record: TrialRecord) -> str:
+        return json.dumps(dataclasses.asdict(TrialTimingDocument(answer_duration_seconds=trial_record.answer_duration_seconds)), indent=2)
 
     @staticmethod
     def _serialize_trial_grade(trial_grade: TrialGrade) -> str:
@@ -83,6 +94,7 @@ class EvaluationArtifactEmitter:
             check_outcomes=tuple(
                 EvaluationArtifactEmitter._map_to_check_outcome_document(check_outcome) for check_outcome in trial_grade.check_outcomes
             ),
+            grading_duration_seconds=trial_grade.grading_duration_seconds,
         )
 
     @staticmethod

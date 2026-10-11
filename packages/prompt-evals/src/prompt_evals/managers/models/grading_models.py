@@ -52,9 +52,13 @@ class JudgeVerdict:
 
 @dataclass(frozen=True)
 class TrialGrade:
+    """`grading_duration_seconds` is how long grading this trial took: fact extraction, every judge and the code checks.
+    It is 0 for a trial that errored, because nothing is graded."""
+
     trial_identity: TrialIdentity
     extracted_facts: ExtractedFacts | None
     check_outcomes: tuple[CheckOutcome, ...]
+    grading_duration_seconds: float
 
 
 @dataclass(frozen=True)

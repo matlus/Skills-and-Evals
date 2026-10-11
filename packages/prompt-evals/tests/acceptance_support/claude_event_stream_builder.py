@@ -70,7 +70,7 @@ class ClaudeEventStreamBuilder:
                 "result": scripted_event_stream_session.final_text,
                 "structured_output": scripted_event_stream_session.structured_output,
                 "errors": list(scripted_event_stream_session.error_messages),
-                "duration_ms": 1234,
+                "duration_ms": scripted_event_stream_session.duration_milliseconds,
                 "total_cost_usd": 0.0123,
             }
         )

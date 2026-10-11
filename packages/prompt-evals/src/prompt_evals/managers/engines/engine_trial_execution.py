@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from collections.abc import Iterable
 from typing import Final, final
 
@@ -15,6 +16,7 @@ from prompt_evals.managers.models.trial_models import CompletedTrial, ErroredTri
 # The prompts say "attached"; in a CLI session the attachments are files in the working directory.
 # Every variant receives the identical note, so it cannot favour one prompt over another.
 ATTACHMENT_NOTE_TEMPLATE: Final[str] = "\n\n---\nAttached files (in the current working directory): {attached_file_names}\n"
+MILLISECONDS_PER_SECOND: Final[int] = 1000
 
 
 @final
@@ -36,14 +38,39 @@ class EngineTrialExecution:
 
     def _read_recorded_trial(self, recorded_trial: RecordedTrial, model_name: str) -> TrialRecord:
         match recorded_trial:
-            case RecordedErroredTrial(trial_identity=trial_identity, error_description=error_description):
-                return ErroredTrial(trial_identity=trial_identity, error_description=error_description)
-            case RecordedCompletedTrial(trial_identity=trial_identity, event_stream_text=event_stream_text):
+            case RecordedErroredTrial(
+                trial_identity=trial_identity, error_description=error_description, answer_duration_seconds=answer_duration_seconds
+            ):
+                return ErroredTrial(
+                    trial_identity=trial_identity, error_description=error_description, answer_duration_seconds=answer_duration_seconds
+                )
+            case RecordedCompletedTrial(
+                trial_identity=trial_identity, event_stream_text=event_stream_text, answer_duration_seconds=answer_duration_seconds
+            ):
                 try:
                     llm_session_transcript: LlmSessionTranscript = self._gateway_llm.read_recorded_session(event_stream_text, model_name)
                 except SINGLE_SESSION_FAILURE_TYPES as single_session_failure:
-                    return ErroredTrial(trial_identity=trial_identity, error_description=single_session_failure.message)
-                return CompletedTrial(trial_identity=trial_identity, llm_session_transcript=llm_session_transcript)
+                    return ErroredTrial(
+                        trial_identity=trial_identity,
+                        error_description=single_session_failure.message,
+                        answer_duration_seconds=answer_duration_seconds,
+                    )
+                return CompletedTrial(
+                    trial_identity=trial_identity,
+                    llm_session_transcript=llm_session_transcript,
+                    answer_duration_seconds=self._choose_recorded_answer_duration(
+                        answer_duration_seconds, llm_session_transcript.duration_milliseconds
+                    ),
+                )
+
+    @staticmethod
+    def _choose_recorded_answer_duration(answer_duration_seconds: float | None, stream_duration_milliseconds: int | None) -> float | None:
+        # Runs recorded before answer times were saved still have the duration some assistants report in their own event stream.
+        if answer_duration_seconds is not None:
+            return answer_duration_seconds
+        if stream_duration_milliseconds is None:
+            return None
+        return stream_duration_milliseconds / MILLISECONDS_PER_SECOND
 
     @staticmethod
     def _compose_trial_assignments(eval_suite: EvalSuite, evaluation_request: EvaluationRequest) -> list[TrialAssignment]:
@@ -107,6 +134,8 @@ class EngineTrialExecution:
             self._logger.info(
                 "Trial started: %s / %s / run %d", trial_identity.variant_name, trial_identity.case_name, trial_identity.repetition_number
             )
+            # Timed inside the slot, so the answer time excludes waiting for another trial to finish.
+            started_seconds: float = time.perf_counter()
             try:
                 llm_session_transcript: LlmSessionTranscript = await self._gateway_llm.run_session(trial_assignment.llm_session_request)
             except SINGLE_SESSION_FAILURE_TYPES as single_session_failure:
@@ -115,12 +144,19 @@ class EngineTrialExecution:
                 self._logger.info(
                     "Trial errored: %s / %s / run %d", trial_identity.variant_name, trial_identity.case_name, trial_identity.repetition_number
                 )
-                return ErroredTrial(trial_identity=trial_identity, error_description=single_session_failure.message)
+                return ErroredTrial(
+                    trial_identity=trial_identity,
+                    error_description=single_session_failure.message,
+                    answer_duration_seconds=time.perf_counter() - started_seconds,
+                )
+            answer_duration_seconds: float = time.perf_counter() - started_seconds
         self._logger.info(
             "Trial finished: %s / %s / run %d in %.0fs",
             trial_identity.variant_name,
             trial_identity.case_name,
             trial_identity.repetition_number,
-            llm_session_transcript.duration_milliseconds / 1000,
+            answer_duration_seconds,
         )
-        return CompletedTrial(trial_identity=trial_identity, llm_session_transcript=llm_session_transcript)
+        return CompletedTrial(
+            trial_identity=trial_identity, llm_session_transcript=llm_session_transcript, answer_duration_seconds=answer_duration_seconds
+        )

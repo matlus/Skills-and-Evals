@@ -40,12 +40,13 @@ class ToolCall:
 
 @dataclass(frozen=True)
 class LlmSessionTranscript:
-    """What one session produced, in the domain's terms. `total_cost_usd` is None when the assistant does not report cost."""
+    """What one session produced, in the domain's terms. `total_cost_usd` is None when the assistant does not report cost,
+    and `duration_milliseconds` is None when a recorded session is read again and its event stream holds no duration."""
 
     final_text: str
     structured_output_json: str | None
     tool_calls: tuple[ToolCall, ...]
     resolved_model_name: str
-    duration_milliseconds: int
+    duration_milliseconds: int | None
     total_cost_usd: Decimal | None
     event_stream_text: str

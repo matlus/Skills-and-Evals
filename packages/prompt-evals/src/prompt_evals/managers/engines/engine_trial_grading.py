@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from collections.abc import Iterable, Mapping
 from typing import Final, assert_never, final
 
@@ -12,7 +13,7 @@ from prompt_evals.managers.engines.processors.judge_check_grading_processor impo
 from prompt_evals.managers.engines.processors.tool_use_check_grading_processor import ToolUseCheckGradingProcessor
 from prompt_evals.managers.exceptions.grading_exceptions import GraderResponseInvalidException
 from prompt_evals.managers.exceptions.llm_session_exceptions import SINGLE_SESSION_FAILURE_TYPES
-from prompt_evals.managers.exceptions.prompt_evals_exceptions import PromptEvalsTechnicalExceptionBase
+from prompt_evals.managers.exceptions.prompt_evals_exceptions import PromptEvalsTechnicalBaseException
 from prompt_evals.managers.gateways.gateway_llm_protocol import GatewayLlmProtocol
 from prompt_evals.managers.models.eval_suite_models import (
     AmountCheckDefinition,
@@ -39,7 +40,7 @@ from prompt_evals.managers.models.grading_models import (
 )
 from prompt_evals.managers.models.trial_models import CompletedTrial, ErroredTrial, TrialIdentity, TrialRecord
 
-GRADER_FAILURE_TYPES: Final[tuple[type[PromptEvalsTechnicalExceptionBase], ...]] = (*SINGLE_SESSION_FAILURE_TYPES, GraderResponseInvalidException)
+GRADER_FAILURE_TYPES: Final[tuple[type[PromptEvalsTechnicalBaseException], ...]] = (*SINGLE_SESSION_FAILURE_TYPES, GraderResponseInvalidException)
 
 
 @final
@@ -117,9 +118,12 @@ class EngineTrialGrading:
                         self._create_errored_outcome(check_definition, trial_identity, f"the trial did not complete: {error_description}")
                         for check_definition in check_definitions
                     ),
+                    grading_duration_seconds=0.0,
                 )
             case CompletedTrial():
                 async with grading_slots:
+                    # Timed inside the slot, so the grading time excludes waiting for another trial's graders to finish.
+                    started_seconds: float = time.perf_counter()
                     self._logger.info(
                         "Grading: %s / %s / run %d", trial_identity.variant_name, trial_identity.case_name, trial_identity.repetition_number
                     )
@@ -130,12 +134,14 @@ class EngineTrialGrading:
                         ),
                     )
                 fact_extraction_attempt: FactExtractionAttempt = grader_reports.fact_extraction_attempt
+                check_outcomes: tuple[CheckOutcome, ...] = tuple(
+                    self._grade_check(check_definition, trial_record, eval_case, grader_reports) for check_definition in check_definitions
+                )
                 return TrialGrade(
                     trial_identity=trial_identity,
                     extracted_facts=fact_extraction_attempt.extracted_facts if isinstance(fact_extraction_attempt, SucceededFactExtraction) else None,
-                    check_outcomes=tuple(
-                        self._grade_check(check_definition, trial_record, eval_case, grader_reports) for check_definition in check_definitions
-                    ),
+                    check_outcomes=check_outcomes,
+                    grading_duration_seconds=time.perf_counter() - started_seconds,
                 )
 
     async def _attempt_fact_extraction(self, fact_extraction: FactExtraction, answer_text: str) -> FactExtractionAttempt:

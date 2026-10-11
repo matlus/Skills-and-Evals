@@ -75,7 +75,7 @@ class GatewayLlmCodexCli:
     flags and the `--json` event stream on the way.
 
     The stream names no model and reports tokens but no cost, so the transcript carries the requested model name
-    and no cost; the duration is measured around the process, so a recorded session read again reports a duration of 0.
+    and no cost; the duration is measured around the process, so a recorded session read again reports no duration.
     """
 
     def __init__(self, codex_cli_settings: CodexCliSettings, process_runner: ProcessRunnerBase) -> None:
@@ -106,7 +106,7 @@ class GatewayLlmCodexCli:
         self._raise_if_session_failed(codex_event_stream_resource, model_name)
         # Recorded sessions are trials, which never request structured output.
         return self._map_to_transcript(
-            codex_event_stream_resource, event_stream_text, model_name, structured_output_json=None, duration_milliseconds=0
+            codex_event_stream_resource, event_stream_text, model_name, structured_output_json=None, duration_milliseconds=None
         )
 
     async def _run_in_fresh_sandbox(self, llm_session_request: LlmSessionRequest) -> ProcessOutcome:
@@ -233,7 +233,7 @@ class GatewayLlmCodexCli:
         model_name: str,
         *,
         structured_output_json: str | None,
-        duration_milliseconds: int,
+        duration_milliseconds: int | None,
     ) -> LlmSessionTranscript:
         final_message_text: str | None = GatewayLlmCodexCli._read_final_message_text(codex_event_stream_resource.codex_agent_message_resources)
         return LlmSessionTranscript(

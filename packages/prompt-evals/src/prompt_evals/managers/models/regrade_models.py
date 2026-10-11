@@ -7,16 +7,24 @@ from prompt_evals.managers.models.trial_models import TrialIdentity
 
 @dataclass(frozen=True)
 class RecordedCompletedTrial:
-    """A finished trial as an earlier run saved it: the assistant's raw event stream, from which its answer and tool calls are read again."""
+    """A finished trial as an earlier run saved it: the assistant's raw event stream, from which its answer and tool calls are read again.
+
+    `answer_duration_seconds` is the answer time the run saved, or None when it saved none; the duration the event stream
+    itself reports, if any, is used instead.
+    """
 
     trial_identity: TrialIdentity
     event_stream_text: str
+    answer_duration_seconds: float | None
 
 
 @dataclass(frozen=True)
 class RecordedErroredTrial:
+    """`answer_duration_seconds` is the time the run saved for the failed session, or None when it saved none."""
+
     trial_identity: TrialIdentity
     error_description: str
+    answer_duration_seconds: float | None
 
 
 type RecordedTrial = RecordedCompletedTrial | RecordedErroredTrial
