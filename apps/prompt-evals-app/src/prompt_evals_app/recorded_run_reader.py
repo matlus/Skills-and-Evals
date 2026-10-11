@@ -5,7 +5,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, cast, final
 
-from prompt_evals import CodingAssistant, EffortLevel, RecordedCompletedTrial, RecordedErroredTrial, RecordedTrial, TrialIdentity
+from prompt_evals import (
+    CodingAssistant,
+    EffortLevel,
+    PromptEvalsBusinessBaseException,
+    RecordedCompletedTrial,
+    RecordedErroredTrial,
+    RecordedTrial,
+    TrialIdentity,
+)
 
 TEXT_ENCODING: Final[str] = "utf-8"
 SCORECARD_FILE_NAME: Final[str] = "scorecard.json"
@@ -14,14 +22,20 @@ EVENT_STREAM_FILE_NAME: Final[str] = "event_stream.jsonl"
 ERROR_FILE_NAME: Final[str] = "error.txt"
 TIMING_FILE_NAME: Final[str] = "timing.json"
 ANSWER_DURATION_FIELD_NAME: Final[str] = "answer_duration_seconds"
+CODING_ASSISTANT_FIELD_NAME: Final[str] = "coding_assistant"
+MODEL_NAME_FIELD_NAME: Final[str] = "model_name"
+EFFORT_LEVEL_FIELD_NAME: Final[str] = "effort_level"
 RUN_DIRECTORY_PATTERN: Final[re.Pattern[str]] = re.compile(r"^run-(\d+)$")
 
 type JsonObject = dict[str, object]
 
 
 @final
-class RecordedRunUnreadableException(Exception):
+class RecordedRunUnreadableException(PromptEvalsBusinessBaseException):
     """The folder is not a run directory this app wrote, so it cannot be regraded."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, {})
 
 
 @dataclass(frozen=True)
@@ -67,16 +81,16 @@ class RecordedRunReader:
         except json.JSONDecodeError as invalid_scorecard:
             raise RecordedRunUnreadableException(f"{scorecard_path} cannot be read: {invalid_scorecard}") from invalid_scorecard
         if not isinstance(scorecard_document, dict):
-            raise RecordedRunUnreadableException(f"{scorecard_path} does not hold a JSON object")
+            raise RecordedRunUnreadableException(f"{scorecard_path} must hold a JSON object; it holds {type(scorecard_document).__name__}")
         scorecard_object: JsonObject = cast(JsonObject, scorecard_document)
-        coding_assistant_value: object = scorecard_object.get("coding_assistant", fallback_coding_assistant.value)
-        model_name: object = scorecard_object.get("model_name")
-        effort_level_value: object = scorecard_object.get("effort_level")
+        coding_assistant_value: object = scorecard_object.get(CODING_ASSISTANT_FIELD_NAME, fallback_coding_assistant.value)
+        model_name: object = scorecard_object.get(MODEL_NAME_FIELD_NAME)
+        effort_level_value: object = scorecard_object.get(EFFORT_LEVEL_FIELD_NAME)
         if not isinstance(coding_assistant_value, str) or not isinstance(model_name, str) or not isinstance(effort_level_value, str):
             field_value_by_field_name: dict[str, object] = {
-                "coding_assistant": coding_assistant_value,
-                "model_name": model_name,
-                "effort_level": effort_level_value,
+                CODING_ASSISTANT_FIELD_NAME: coding_assistant_value,
+                MODEL_NAME_FIELD_NAME: model_name,
+                EFFORT_LEVEL_FIELD_NAME: effort_level_value,
             }
             non_string_fields: list[str] = [
                 f"{field_name}={field_value_by_field_name[field_name]!r}"
@@ -104,26 +118,16 @@ class RecordedRunReader:
     def _read_recorded_trials(trials_directory: Path) -> tuple[RecordedTrial, ...]:
         # Layout: trials/<variant>/<case>/run-NN/ holding event_stream.jsonl, or error.txt for a trial that errored.
         recorded_trials: list[RecordedTrial] = [
-            RecordedRunReader._read_recorded_trial(trial_directory, RecordedRunReader._compose_trial_identity(trial_directory))
-            for trial_directory in RecordedRunReader._find_trial_directories(trials_directory)
+            RecordedRunReader._read_recorded_trial(trial_directory, RecordedRunReader._compose_trial_identity(trial_directory, run_match))
+            for trial_directory in sorted(trials_directory.glob("*/*/run-*"))
+            if (run_match := RUN_DIRECTORY_PATTERN.fullmatch(trial_directory.name)) is not None and trial_directory.is_dir()
         ]
         if not recorded_trials:
             raise RecordedRunUnreadableException(f"{trials_directory} holds no trials/<variant>/<case>/run-NN folders")
         return tuple(recorded_trials)
 
     @staticmethod
-    def _find_trial_directories(trials_directory: Path) -> list[Path]:
-        return [
-            trial_directory
-            for trial_directory in sorted(trials_directory.glob("*/*/run-*"))
-            if RUN_DIRECTORY_PATTERN.fullmatch(trial_directory.name) is not None and trial_directory.is_dir()
-        ]
-
-    @staticmethod
-    def _compose_trial_identity(trial_directory: Path) -> TrialIdentity:
-        run_match: re.Match[str] | None = RUN_DIRECTORY_PATTERN.fullmatch(trial_directory.name)
-        if run_match is None:
-            raise RecordedRunUnreadableException(f"{trial_directory} is not a run-NN folder")
+    def _compose_trial_identity(trial_directory: Path, run_match: re.Match[str]) -> TrialIdentity:
         return TrialIdentity(
             variant_name=trial_directory.parent.parent.name, case_name=trial_directory.parent.name, repetition_number=int(run_match.group(1))
         )
@@ -160,7 +164,7 @@ class RecordedRunReader:
         except json.JSONDecodeError as invalid_timing:
             raise RecordedRunUnreadableException(f"{timing_path} cannot be read: {invalid_timing}") from invalid_timing
         if not isinstance(timing_document, dict):
-            raise RecordedRunUnreadableException(f"{timing_path} does not hold a JSON object")
+            raise RecordedRunUnreadableException(f"{timing_path} must hold a JSON object; it holds {type(timing_document).__name__}")
         return RecordedRunReader._validate_answer_duration(cast(JsonObject, timing_document).get(ANSWER_DURATION_FIELD_NAME), timing_path)
 
     @staticmethod
