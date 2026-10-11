@@ -5,14 +5,20 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, cast, final
 
-from prompt_evals import (
-    CodingAssistant,
-    EffortLevel,
-    PromptEvalsBusinessBaseException,
-    RecordedCompletedTrial,
-    RecordedErroredTrial,
-    RecordedTrial,
-    TrialIdentity,
+from prompt_evals import CodingAssistant, EffortLevel, RecordedCompletedTrial, RecordedErroredTrial, RecordedTrial, TrialIdentity
+from prompt_evals_app.recorded_run_exceptions import (
+    RecordedRunFileNotUtf8Exception,
+    RecordedRunFileReadFailedException,
+    RecordedRunScorecardMissingException,
+    RecordedRunScorecardNotJsonException,
+    RecordedRunScorecardNotObjectException,
+    RecordedRunSettingsNotTextException,
+    RecordedRunSettingUnknownException,
+    RecordedRunTrialsMissingException,
+    RecordedTrialAnswerDurationInvalidException,
+    RecordedTrialOutcomeMissingException,
+    RecordedTrialTimingNotJsonException,
+    RecordedTrialTimingNotObjectException,
 )
 
 TEXT_ENCODING: Final[str] = "utf-8"
@@ -28,14 +34,6 @@ EFFORT_LEVEL_FIELD_NAME: Final[str] = "effort_level"
 RUN_DIRECTORY_PATTERN: Final[re.Pattern[str]] = re.compile(r"^run-(\d+)$")
 
 type JsonObject = dict[str, object]
-
-
-@final
-class RecordedRunUnreadableException(PromptEvalsBusinessBaseException):
-    """The folder is not a run directory this app wrote, so it cannot be regraded."""
-
-    def __init__(self, message: str) -> None:
-        super().__init__(message, {})
 
 
 @dataclass(frozen=True)
@@ -64,6 +62,8 @@ class RecordedRunReader:
     @staticmethod
     def read_recorded_run(run_directory: Path, fallback_coding_assistant: CodingAssistant) -> RecordedRun:
         scorecard_path: Path = run_directory / SCORECARD_FILE_NAME
+        if not scorecard_path.is_file():
+            raise RecordedRunScorecardMissingException(scorecard_path)
         recorded_run_settings: RecordedRunSettings = RecordedRunReader._parse_run_settings(
             RecordedRunReader._read_text_file(scorecard_path), scorecard_path, fallback_coding_assistant
         )
@@ -79,9 +79,9 @@ class RecordedRunReader:
         try:
             scorecard_document: object = json.loads(scorecard_text)
         except json.JSONDecodeError as invalid_scorecard:
-            raise RecordedRunUnreadableException(f"{scorecard_path} cannot be read: {invalid_scorecard}") from invalid_scorecard
+            raise RecordedRunScorecardNotJsonException(scorecard_path, str(invalid_scorecard)) from invalid_scorecard
         if not isinstance(scorecard_document, dict):
-            raise RecordedRunUnreadableException(f"{scorecard_path} must hold a JSON object; it holds {type(scorecard_document).__name__}")
+            raise RecordedRunScorecardNotObjectException(scorecard_path, type(scorecard_document).__name__)
         scorecard_object: JsonObject = cast(JsonObject, scorecard_document)
         coding_assistant_value: object = scorecard_object.get(CODING_ASSISTANT_FIELD_NAME, fallback_coding_assistant.value)
         model_name: object = scorecard_object.get(MODEL_NAME_FIELD_NAME)
@@ -97,22 +97,17 @@ class RecordedRunReader:
                 for field_name in field_value_by_field_name
                 if not isinstance(field_value_by_field_name[field_name], str)
             ]
-            message: str = (
-                f"{scorecard_path} must hold a string coding_assistant, model_name and effort_level; "
-                f"these are not strings: {', '.join(non_string_fields)}"
-            )
-            raise RecordedRunUnreadableException(message)
+            raise RecordedRunSettingsNotTextException(scorecard_path, ", ".join(non_string_fields))
         try:
             return RecordedRunSettings(
                 coding_assistant=CodingAssistant(coding_assistant_value), model_name=model_name, effort_level=EffortLevel(effort_level_value)
             )
         except ValueError as unknown_value:
-            unknown_value_message: str = (
-                f"{scorecard_path}: {unknown_value}; known coding_assistant values are "
-                f"{sorted(coding_assistant.value for coding_assistant in CodingAssistant)} and known effort_level values are "
-                f"{sorted(effort_level.value for effort_level in EffortLevel)}"
+            known_values_description: str = (
+                f"known coding_assistant values are {sorted(coding_assistant.value for coding_assistant in CodingAssistant)} "
+                f"and known effort_level values are {sorted(effort_level.value for effort_level in EffortLevel)}"
             )
-            raise RecordedRunUnreadableException(unknown_value_message) from unknown_value
+            raise RecordedRunSettingUnknownException(scorecard_path, str(unknown_value), known_values_description) from unknown_value
 
     @staticmethod
     def _read_recorded_trials(trials_directory: Path) -> tuple[RecordedTrial, ...]:
@@ -123,7 +118,7 @@ class RecordedRunReader:
             if (run_match := RUN_DIRECTORY_PATTERN.fullmatch(trial_directory.name)) is not None and trial_directory.is_dir()
         ]
         if not recorded_trials:
-            raise RecordedRunUnreadableException(f"{trials_directory} holds no trials/<variant>/<case>/run-NN folders")
+            raise RecordedRunTrialsMissingException(trials_directory)
         return tuple(recorded_trials)
 
     @staticmethod
@@ -148,7 +143,7 @@ class RecordedRunReader:
                 error_description=RecordedRunReader._read_text_file(error_path),
                 answer_duration_seconds=RecordedRunReader._read_answer_duration(trial_directory / TIMING_FILE_NAME),
             )
-        raise RecordedRunUnreadableException(f"{trial_directory} holds neither {EVENT_STREAM_FILE_NAME} nor {ERROR_FILE_NAME}")
+        raise RecordedTrialOutcomeMissingException(trial_directory, EVENT_STREAM_FILE_NAME, ERROR_FILE_NAME)
 
     @staticmethod
     def _read_answer_duration(timing_path: Path) -> float | None:
@@ -162,34 +157,38 @@ class RecordedRunReader:
         try:
             timing_document: object = json.loads(timing_text)
         except json.JSONDecodeError as invalid_timing:
-            raise RecordedRunUnreadableException(f"{timing_path} cannot be read: {invalid_timing}") from invalid_timing
+            raise RecordedTrialTimingNotJsonException(timing_path, str(invalid_timing)) from invalid_timing
         if not isinstance(timing_document, dict):
-            raise RecordedRunUnreadableException(f"{timing_path} must hold a JSON object; it holds {type(timing_document).__name__}")
+            raise RecordedTrialTimingNotObjectException(timing_path, type(timing_document).__name__)
         return RecordedRunReader._validate_answer_duration(cast(JsonObject, timing_document).get(ANSWER_DURATION_FIELD_NAME), timing_path)
 
     @staticmethod
     def _validate_answer_duration(answer_duration_value: object, timing_path: Path) -> float | None:
         if answer_duration_value is None:
             return None
-        unreadable_message: str = (
-            f"{timing_path} must hold a finite number of seconds of zero or more, or null, for {ANSWER_DURATION_FIELD_NAME}; "
-            f"it holds {answer_duration_value!r}"
-        )
+        answer_duration_seconds: float | None = RecordedRunReader._as_seconds(answer_duration_value)
+        if answer_duration_seconds is None:
+            raise RecordedTrialAnswerDurationInvalidException(timing_path, ANSWER_DURATION_FIELD_NAME, repr(answer_duration_value))
+        return answer_duration_seconds
+
+    @staticmethod
+    def _as_seconds(answer_duration_value: object) -> float | None:
+        """The value as a finite, non-negative number of seconds, or None when it is not one."""
         # bool is a subclass of int, so true would otherwise read as one second.
         if isinstance(answer_duration_value, bool) or not isinstance(answer_duration_value, int | float):
-            raise RecordedRunUnreadableException(unreadable_message)
+            return None
         try:
             answer_duration_seconds: float = float(answer_duration_value)
-        except OverflowError as too_large_value:
-            raise RecordedRunUnreadableException(unreadable_message) from too_large_value
+        except OverflowError:
+            return None
         # json.loads reads NaN and Infinity; NaN fails the comparison.
-        if not 0 <= answer_duration_seconds < math.inf:
-            raise RecordedRunUnreadableException(unreadable_message)
-        return answer_duration_seconds
+        return answer_duration_seconds if 0 <= answer_duration_seconds < math.inf else None
 
     @staticmethod
     def _read_text_file(file_path: Path) -> str:
         try:
             return file_path.read_text(encoding=TEXT_ENCODING)
-        except (OSError, UnicodeDecodeError) as unreadable_file:
-            raise RecordedRunUnreadableException(f"{file_path} cannot be read: {unreadable_file}") from unreadable_file
+        except UnicodeDecodeError as not_utf8_text:
+            raise RecordedRunFileNotUtf8Exception(file_path, str(not_utf8_text)) from not_utf8_text
+        except OSError as read_failure:
+            raise RecordedRunFileReadFailedException(file_path, str(read_failure)) from read_failure

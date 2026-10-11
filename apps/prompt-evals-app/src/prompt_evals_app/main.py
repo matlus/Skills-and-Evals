@@ -16,7 +16,7 @@ from prompt_evals import (
     RegradeRequest,
     Scorecard,
 )
-from prompt_evals_app.recorded_run_reader import RecordedRun, RecordedRunReader, RecordedRunUnreadableException
+from prompt_evals_app.recorded_run_reader import RecordedRun, RecordedRunReader
 from prompt_evals_app.results_directory_writer import ResultsDirectoryWriter
 
 EXIT_CODE_GATE_PASSED: Final[int] = 0
@@ -108,9 +108,22 @@ async def regrade(parsed_arguments: argparse.Namespace) -> int:
     source_run_directory: Path = parsed_arguments.regrade
     try:
         recorded_run: RecordedRun = RecordedRunReader.read_recorded_run(source_run_directory, CodingAssistant(parsed_arguments.assistant))
-    except RecordedRunUnreadableException as unreadable_run:
-        LOGGER.error("The run to regrade cannot be read: %s | run_directory=%s", unreadable_run, source_run_directory)
+    except PromptEvalsBusinessBaseException as business_exception:
+        LOGGER.error(
+            "The run to regrade is not one this app wrote: %s | run_directory=%s | context=%s",
+            business_exception.message,
+            source_run_directory,
+            business_exception.contextual_data_by_name,
+        )
         return EXIT_CODE_INVALID_INPUT
+    except PromptEvalsTechnicalBaseException as technical_exception:
+        LOGGER.error(
+            "The run to regrade could not be read: %s | run_directory=%s | context=%s",
+            technical_exception.message,
+            source_run_directory,
+            technical_exception.contextual_data_by_name,
+        )
+        return EXIT_CODE_ENVIRONMENT_FAILURE
     regrade_request: RegradeRequest = RegradeRequest(
         eval_suite_directory=parsed_arguments.eval_suite_directory,
         coding_assistant=recorded_run.coding_assistant,

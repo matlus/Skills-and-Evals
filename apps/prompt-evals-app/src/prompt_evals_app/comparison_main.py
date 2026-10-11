@@ -5,9 +5,9 @@ import sys
 from pathlib import Path
 from typing import Final
 
+from prompt_evals import PromptEvalsBusinessBaseException, PromptEvalsTechnicalBaseException
 from prompt_evals_app.scorecard_comparison_renderer import ScorecardComparisonRenderer
 from prompt_evals_app.scorecard_summary_reader import ScorecardSummaryReader, VariantResult
-from prompt_evals_app.scorecard_summary_unreadable_exception import ScorecardSummaryUnreadableException
 
 EXIT_CODE_WRITTEN: Final[int] = 0
 EXIT_CODE_INVALID_INPUT: Final[int] = 2
@@ -38,9 +38,22 @@ def run(command_line_arguments: list[str]) -> int:
         return EXIT_CODE_INVALID_INPUT
     try:
         variant_results: tuple[VariantResult, ...] = ScorecardSummaryReader.read_latest_variant_results(results_directory)
-    except ScorecardSummaryUnreadableException as scorecard_summary_unreadable_exception:
-        LOGGER.error("A scorecard cannot be compared: %s | results_directory=%s", scorecard_summary_unreadable_exception, results_directory)
+    except PromptEvalsBusinessBaseException as business_exception:
+        LOGGER.error(
+            "A scorecard cannot be compared: %s | results_directory=%s | context=%s",
+            business_exception.message,
+            results_directory,
+            business_exception.contextual_data_by_name,
+        )
         return EXIT_CODE_INVALID_INPUT
+    except PromptEvalsTechnicalBaseException as technical_exception:
+        LOGGER.error(
+            "A scorecard could not be read: %s | results_directory=%s | context=%s",
+            technical_exception.message,
+            results_directory,
+            technical_exception.contextual_data_by_name,
+        )
+        return EXIT_CODE_ENVIRONMENT_FAILURE
     comparison_report: str = ScorecardComparisonRenderer.render_comparison(results_directory.resolve().name, variant_results)
     comparison_path: Path = results_directory / COMPARISON_FILE_NAME
     try:
