@@ -8,6 +8,9 @@ The repository answers one practical question: **when you change a prompt, or a 
 do its job, and if not, exactly why not?** It does that for one realistic task (personal expense analysis) across
 three prompt versions and six models from two vendors, and it keeps every answer, grade and scorecard in `results/`.
 
+The article [Verified, Not Trusted: Expense Analysis, Part Three](https://matlus.com/writing/verified-not-trusted-expense-analysis-part-three/)
+explains why prompts and skills need evals, walks through how this eval is built, and discusses these results.
+
 - [Results at a glance](#results-at-a-glance)
 - [What is being evaluated](#what-is-being-evaluated)
 - [Test vs. eval](#test-vs-eval)
