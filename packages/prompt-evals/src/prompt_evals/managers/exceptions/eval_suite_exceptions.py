@@ -1,11 +1,11 @@
 from pathlib import Path
 from typing import final
 
-from prompt_evals.managers.exceptions.prompt_evals_exceptions import PromptEvalsBusinessExceptionBase
+from prompt_evals.managers.exceptions.prompt_evals_exceptions import PromptEvalsBusinessBaseException
 
 
 @final
-class EvalSuiteNotFoundException(PromptEvalsBusinessExceptionBase):
+class EvalSuiteNotFoundException(PromptEvalsBusinessBaseException):
     def __init__(self, eval_suite_definition_path: Path) -> None:
         super().__init__(
             f"No eval suite definition was found at '{eval_suite_definition_path}'.",
@@ -14,7 +14,7 @@ class EvalSuiteNotFoundException(PromptEvalsBusinessExceptionBase):
 
 
 @final
-class EvalSuiteDefinitionInvalidException(PromptEvalsBusinessExceptionBase):
+class EvalSuiteDefinitionInvalidException(PromptEvalsBusinessBaseException):
     def __init__(self, eval_suite_directory: Path, definition_problems: list[str]) -> None:
         super().__init__(
             f"The eval suite in '{eval_suite_directory}' is invalid: " + "; ".join(definition_problems),

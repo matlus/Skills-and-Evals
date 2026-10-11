@@ -9,7 +9,7 @@ from prompt_evals_app.scorecard_document_resources import (
     ScorecardRowResource,
     VariantTimingResource,
 )
-from prompt_evals_app.scorecard_summary_unreadable_error import ScorecardSummaryUnreadableError
+from prompt_evals_app.scorecard_summary_unreadable_exception import ScorecardSummaryUnreadableException
 
 type JsonObject = dict[str, object]
 
@@ -67,9 +67,9 @@ class ValidatorScorecardDocumentResource:
         try:
             scorecard_document: object = json.loads(scorecard_text)
         except json.JSONDecodeError as invalid_scorecard:
-            raise ScorecardSummaryUnreadableError(f"{scorecard_path} is not valid JSON: {invalid_scorecard}") from invalid_scorecard
+            raise ScorecardSummaryUnreadableException(f"{scorecard_path} is not valid JSON: {invalid_scorecard}") from invalid_scorecard
         if not isinstance(scorecard_document, dict):
-            raise ScorecardSummaryUnreadableError(f"{scorecard_path} must hold a JSON object; it holds {type(scorecard_document).__name__}")
+            raise ScorecardSummaryUnreadableException(f"{scorecard_path} must hold a JSON object; it holds {type(scorecard_document).__name__}")
         return cast(JsonObject, scorecard_document)
 
     @staticmethod
@@ -126,28 +126,28 @@ class ValidatorScorecardDocumentResource:
     def _read_object(json_object: JsonObject, field_name: str, scorecard_path: Path) -> JsonObject:
         field_value: object = json_object.get(field_name)
         if not isinstance(field_value, dict):
-            raise ScorecardSummaryUnreadableError(f"{scorecard_path}: {field_name} must be a JSON object; it holds {field_value!r}")
+            raise ScorecardSummaryUnreadableException(f"{scorecard_path}: {field_name} must be a JSON object; it holds {field_value!r}")
         return cast(JsonObject, field_value)
 
     @staticmethod
     def _read_object_list(json_object: JsonObject, field_name: str, scorecard_path: Path) -> list[JsonObject]:
         field_value: object = json_object.get(field_name)
         if not isinstance(field_value, list) or not all(isinstance(list_item, dict) for list_item in cast(list[object], field_value)):
-            raise ScorecardSummaryUnreadableError(f"{scorecard_path}: {field_name} must be a list of JSON objects; it holds {field_value!r}")
+            raise ScorecardSummaryUnreadableException(f"{scorecard_path}: {field_name} must be a list of JSON objects; it holds {field_value!r}")
         return cast(list[JsonObject], field_value)
 
     @staticmethod
     def _read_string(json_object: JsonObject, field_name: str, scorecard_path: Path, default_value: str | None = None) -> str:
         field_value: object = json_object.get(field_name, default_value)
         if not isinstance(field_value, str):
-            raise ScorecardSummaryUnreadableError(f"{scorecard_path}: {field_name} must be a string; it holds {field_value!r}")
+            raise ScorecardSummaryUnreadableException(f"{scorecard_path}: {field_name} must be a string; it holds {field_value!r}")
         return field_value
 
     @staticmethod
     def _read_bool(json_object: JsonObject, field_name: str, scorecard_path: Path) -> bool:
         field_value: object = json_object.get(field_name)
         if not isinstance(field_value, bool):
-            raise ScorecardSummaryUnreadableError(f"{scorecard_path}: {field_name} must be true or false; it holds {field_value!r}")
+            raise ScorecardSummaryUnreadableException(f"{scorecard_path}: {field_name} must be true or false; it holds {field_value!r}")
         return field_value
 
     @staticmethod
@@ -155,7 +155,9 @@ class ValidatorScorecardDocumentResource:
         field_value: object = json_object.get(field_name)
         # bool is a subclass of int, so true would otherwise read as a count of one.
         if isinstance(field_value, bool) or not isinstance(field_value, int) or field_value < 0:
-            raise ScorecardSummaryUnreadableError(f"{scorecard_path}: {field_name} must be a whole number of zero or more; it holds {field_value!r}")
+            raise ScorecardSummaryUnreadableException(
+                f"{scorecard_path}: {field_name} must be a whole number of zero or more; it holds {field_value!r}"
+            )
         return field_value
 
     @staticmethod
@@ -163,12 +165,12 @@ class ValidatorScorecardDocumentResource:
         field_value: object = json_object.get(field_name)
         unreadable_message: str = f"{scorecard_path}: {field_name} must be a finite number of seconds of zero or more; it holds {field_value!r}"
         if isinstance(field_value, bool) or not isinstance(field_value, int | float):
-            raise ScorecardSummaryUnreadableError(unreadable_message)
+            raise ScorecardSummaryUnreadableException(unreadable_message)
         try:
             seconds: float = float(field_value)
         except OverflowError as too_large_value:
-            raise ScorecardSummaryUnreadableError(unreadable_message) from too_large_value
+            raise ScorecardSummaryUnreadableException(unreadable_message) from too_large_value
         # json.loads reads NaN and Infinity; NaN fails the comparison.
         if not 0 <= seconds < math.inf:
-            raise ScorecardSummaryUnreadableError(unreadable_message)
+            raise ScorecardSummaryUnreadableException(unreadable_message)
         return seconds

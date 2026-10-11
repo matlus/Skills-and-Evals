@@ -15,9 +15,9 @@ from prompt_evals.managers.exceptions.llm_session_exceptions import (
 )
 from prompt_evals.managers.exceptions.prompt_evals_exceptions import (
     ContextualDataDict,
-    PromptEvalsBusinessExceptionBase,
-    PromptEvalsExceptionBase,
-    PromptEvalsTechnicalExceptionBase,
+    PromptEvalsBaseException,
+    PromptEvalsBusinessBaseException,
+    PromptEvalsTechnicalBaseException,
 )
 from prompt_evals.managers.exceptions.scorecard_exceptions import ScorecardValidationException
 from prompt_evals.managers.models.artifact_models import EvaluationArtifact, EvaluationArtifactCallback, EvaluationArtifactType
@@ -56,9 +56,9 @@ __all__ = [
     "LlmSessionFailedException",
     "LlmSessionOutputMalformedException",
     "LlmSessionTimeoutException",
-    "PromptEvalsBusinessExceptionBase",
-    "PromptEvalsExceptionBase",
-    "PromptEvalsTechnicalExceptionBase",
+    "PromptEvalsBaseException",
+    "PromptEvalsBusinessBaseException",
+    "PromptEvalsTechnicalBaseException",
     "RecordedCompletedTrial",
     "RecordedErroredTrial",
     "RecordedTrial",

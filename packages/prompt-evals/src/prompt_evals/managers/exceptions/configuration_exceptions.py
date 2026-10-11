@@ -1,10 +1,10 @@
 from typing import final
 
-from prompt_evals.managers.exceptions.prompt_evals_exceptions import PromptEvalsTechnicalExceptionBase
+from prompt_evals.managers.exceptions.prompt_evals_exceptions import PromptEvalsTechnicalBaseException
 
 
 @final
-class ConfigurationSettingException(PromptEvalsTechnicalExceptionBase):
+class ConfigurationSettingException(PromptEvalsTechnicalBaseException):
     def __init__(self, environment_variable_name: str, configured_value: str, expectation: str) -> None:
         super().__init__(
             f"The configuration setting {environment_variable_name}='{configured_value}' is invalid: {expectation}.",

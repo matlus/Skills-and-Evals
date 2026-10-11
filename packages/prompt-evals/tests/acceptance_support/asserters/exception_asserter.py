@@ -1,6 +1,6 @@
 from collections.abc import Mapping
 
-from prompt_evals import PromptEvalsExceptionBase
+from prompt_evals import PromptEvalsBaseException
 
 
 class ExceptionAsserter:
@@ -9,10 +9,10 @@ class ExceptionAsserter:
     @staticmethod
     def assert_expected_and_actual_are_equal(
         *,
-        expected_exception_type: type[PromptEvalsExceptionBase],
+        expected_exception_type: type[PromptEvalsBaseException],
         expected_message_phrases: tuple[str, ...],
         expected_contextual_entries_by_name: Mapping[str, object],
-        actual_exception: PromptEvalsExceptionBase,
+        actual_exception: PromptEvalsBaseException,
     ) -> None:
         mismatches: list[str] = []
         if type(actual_exception) is not expected_exception_type:

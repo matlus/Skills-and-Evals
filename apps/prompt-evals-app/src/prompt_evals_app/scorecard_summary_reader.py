@@ -9,7 +9,7 @@ from prompt_evals_app.scorecard_document_resources import (
     ScorecardRowResource,
     VariantTimingResource,
 )
-from prompt_evals_app.scorecard_summary_unreadable_error import ScorecardSummaryUnreadableError
+from prompt_evals_app.scorecard_summary_unreadable_exception import ScorecardSummaryUnreadableException
 from prompt_evals_app.validator_scorecard_document_resource import ValidatorScorecardDocumentResource
 
 TEXT_ENCODING: Final[str] = "utf-8"
@@ -87,7 +87,7 @@ class ScorecardSummaryReader:
         try:
             return scorecard_path.read_text(encoding=TEXT_ENCODING)
         except (OSError, UnicodeDecodeError) as unreadable_file:
-            raise ScorecardSummaryUnreadableError(f"{scorecard_path} cannot be read: {unreadable_file}") from unreadable_file
+            raise ScorecardSummaryUnreadableException(f"{scorecard_path} cannot be read: {unreadable_file}") from unreadable_file
 
     @staticmethod
     def _create_variant_result(run_folder_name: str, scorecard_document_resource: ScorecardDocumentResource, variant_name: str) -> VariantResult:

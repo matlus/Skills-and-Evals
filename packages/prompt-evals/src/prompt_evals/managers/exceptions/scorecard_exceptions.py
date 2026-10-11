@@ -1,10 +1,10 @@
 from typing import final
 
-from prompt_evals.managers.exceptions.prompt_evals_exceptions import PromptEvalsBusinessExceptionBase
+from prompt_evals.managers.exceptions.prompt_evals_exceptions import PromptEvalsBusinessBaseException
 
 
 @final
-class ScorecardValidationException(PromptEvalsBusinessExceptionBase):
+class ScorecardValidationException(PromptEvalsBusinessBaseException):
     def __init__(self, validation_problems: list[str]) -> None:
         super().__init__(
             "The scorecard cannot be rendered: " + "; ".join(validation_problems),

@@ -7,7 +7,7 @@ from typing import Final
 import pytest
 
 from prompt_evals import CodingAssistant, EffortLevel, RecordedCompletedTrial, TrialIdentity
-from prompt_evals_app.recorded_run_reader import RecordedRun, RecordedRunReader, RecordedRunUnreadableError
+from prompt_evals_app.recorded_run_reader import RecordedRun, RecordedRunReader, RecordedRunUnreadableException
 
 INVALID_UTF8_BYTES: Final[bytes] = b"\xff\xfe\xfa"
 TRIAL_DIRECTORY_PARTS: Final[tuple[str, ...]] = ("trials", "standard", "refund", "run-07")
@@ -50,7 +50,7 @@ class TestRecordedRunReader:
         (trial_directory / "event_stream.jsonl").write_bytes(INVALID_UTF8_BYTES)
 
         # Act / Assert
-        with pytest.raises(RecordedRunUnreadableError, match=re.escape("event_stream.jsonl cannot be read")):
+        with pytest.raises(RecordedRunUnreadableException, match=re.escape("event_stream.jsonl cannot be read")):
             RecordedRunReader.read_recorded_run(tmp_path, CodingAssistant.CLAUDE_CODE)
 
     def test_ReadRecordedRun_WhenScorecardIsNotUtf8_ThenRunIsUnreadable(self, tmp_path: Path) -> None:
@@ -59,7 +59,7 @@ class TestRecordedRunReader:
         (tmp_path / "scorecard.json").write_bytes(INVALID_UTF8_BYTES)
 
         # Act / Assert
-        with pytest.raises(RecordedRunUnreadableError, match=re.escape("scorecard.json cannot be read")):
+        with pytest.raises(RecordedRunUnreadableException, match=re.escape("scorecard.json cannot be read")):
             RecordedRunReader.read_recorded_run(tmp_path, CodingAssistant.CLAUDE_CODE)
 
     def test_ReadRecordedRun_WhenEffortLevelIsNotAString_ThenMessageNamesOnlyThatField(self, tmp_path: Path) -> None:
@@ -69,7 +69,7 @@ class TestRecordedRunReader:
         write_run_directory(tmp_path, scorecard_object)
 
         # Act
-        with pytest.raises(RecordedRunUnreadableError) as raised_error:
+        with pytest.raises(RecordedRunUnreadableException) as raised_error:
             RecordedRunReader.read_recorded_run(tmp_path, CodingAssistant.CLAUDE_CODE)
 
         # Assert
@@ -87,7 +87,7 @@ class TestRecordedRunReader:
         write_run_directory(tmp_path, scorecard_object)
 
         # Act
-        with pytest.raises(RecordedRunUnreadableError) as raised_error:
+        with pytest.raises(RecordedRunUnreadableException) as raised_error:
             RecordedRunReader.read_recorded_run(tmp_path, CodingAssistant.CLAUDE_CODE)
 
         # Assert
@@ -134,6 +134,7 @@ class TestRecordedRunReader:
 
         # Act / Assert
         with pytest.raises(
-            RecordedRunUnreadableError, match=re.escape("must hold a finite number of seconds of zero or more, or null, for answer_duration_seconds")
+            RecordedRunUnreadableException,
+            match=re.escape("must hold a finite number of seconds of zero or more, or null, for answer_duration_seconds"),
         ):
             RecordedRunReader.read_recorded_run(tmp_path, CodingAssistant.CLAUDE_CODE)

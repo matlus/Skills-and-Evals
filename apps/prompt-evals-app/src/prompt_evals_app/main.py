@@ -11,12 +11,12 @@ from prompt_evals import (
     DomainFacade,
     EffortLevel,
     EvaluationRequest,
-    PromptEvalsBusinessExceptionBase,
-    PromptEvalsTechnicalExceptionBase,
+    PromptEvalsBusinessBaseException,
+    PromptEvalsTechnicalBaseException,
     RegradeRequest,
     Scorecard,
 )
-from prompt_evals_app.recorded_run_reader import RecordedRun, RecordedRunReader, RecordedRunUnreadableError
+from prompt_evals_app.recorded_run_reader import RecordedRun, RecordedRunReader, RecordedRunUnreadableException
 from prompt_evals_app.results_directory_writer import ResultsDirectoryWriter
 
 EXIT_CODE_GATE_PASSED: Final[int] = 0
@@ -91,11 +91,11 @@ async def run(command_line_arguments: list[str]) -> int:
         # Constructing the facade reads configuration, which can fail; it belongs inside the boundary.
         domain_facade: DomainFacade = DomainFacade()
         scorecard: Scorecard = await domain_facade.run_evaluation(evaluation_request, results_directory_writer.write_evaluation_artifact)
-    except PromptEvalsBusinessExceptionBase as business_exception:
+    except PromptEvalsBusinessBaseException as business_exception:
         # The caller must fix their input; a traceback would add nothing.
         LOGGER.error("%s | %s | context=%s", business_exception.message, request_context, business_exception.contextual_data_by_name)
         return EXIT_CODE_INVALID_INPUT
-    except PromptEvalsTechnicalExceptionBase as technical_exception:
+    except PromptEvalsTechnicalBaseException as technical_exception:
         LOGGER.exception("The evaluation could not run | %s | context=%s", request_context, technical_exception.contextual_data_by_name)
         return EXIT_CODE_ENVIRONMENT_FAILURE
     except Exception:
@@ -108,7 +108,7 @@ async def regrade(parsed_arguments: argparse.Namespace) -> int:
     source_run_directory: Path = parsed_arguments.regrade
     try:
         recorded_run: RecordedRun = RecordedRunReader.read_recorded_run(source_run_directory, CodingAssistant(parsed_arguments.assistant))
-    except RecordedRunUnreadableError as unreadable_run:
+    except RecordedRunUnreadableException as unreadable_run:
         LOGGER.error("The run to regrade cannot be read: %s | run_directory=%s", unreadable_run, source_run_directory)
         return EXIT_CODE_INVALID_INPUT
     regrade_request: RegradeRequest = RegradeRequest(
@@ -134,10 +134,10 @@ async def regrade(parsed_arguments: argparse.Namespace) -> int:
         domain_facade: DomainFacade = DomainFacade()
         results_directory_writer.write_regraded_from(source_run_directory)
         scorecard: Scorecard = await domain_facade.regrade_evaluation(regrade_request, results_directory_writer.write_evaluation_artifact)
-    except PromptEvalsBusinessExceptionBase as business_exception:
+    except PromptEvalsBusinessBaseException as business_exception:
         LOGGER.error("%s | %s | context=%s", business_exception.message, request_context, business_exception.contextual_data_by_name)
         return EXIT_CODE_INVALID_INPUT
-    except PromptEvalsTechnicalExceptionBase as technical_exception:
+    except PromptEvalsTechnicalBaseException as technical_exception:
         LOGGER.exception("The regrade could not run | %s | context=%s", request_context, technical_exception.contextual_data_by_name)
         return EXIT_CODE_ENVIRONMENT_FAILURE
     except Exception:
