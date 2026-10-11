@@ -6,11 +6,19 @@ from typing import Final, NoReturn, cast, final
 
 from prompt_evals.managers.configuration_providers.settings_models.claude_cli_settings import ClaudeCliSettings
 from prompt_evals.managers.exceptions.llm_session_exceptions import (
+    LlmCliProcessContainmentFailedException,
+    LlmCliProcessResumeFailedException,
     LlmCliStartFailedException,
     LlmSessionExitedWithErrorException,
     LlmSessionFailedException,
-    LlmSessionOutputMalformedException,
+    LlmSessionOutputMalformedBaseException,
     LlmSessionTimeoutException,
+)
+from prompt_evals.managers.exceptions.process_runner_exceptions import (
+    ProcessContainmentFailedException,
+    ProcessResumeFailedException,
+    ProcessStartFailedException,
+    ProcessTimedOutException,
 )
 from prompt_evals.managers.gateways.claude_cli_resources.claude_event_stream_resources import (
     ClaudeEventStreamResource,
@@ -141,7 +149,7 @@ class GatewayLlmClaudeCli:
         """None when the output of a failed process is not a readable event stream; the exit code then explains the failure."""
         try:
             return ValidatorClaudeEventStreamResource.parse_event_stream(event_stream_text, model_name)
-        except LlmSessionOutputMalformedException:
+        except LlmSessionOutputMalformedBaseException:
             return None
 
     @staticmethod
@@ -184,17 +192,25 @@ class GatewayLlmClaudeCli:
     async def _run_claude_process(self, process_invocation: ProcessInvocation, model_name: str) -> ProcessOutcome:
         try:
             return await self._process_runner.run_process(process_invocation)
-        except TimeoutError as timeout_error:
-            raise LlmSessionTimeoutException(CLAUDE_CODE_ASSISTANT_NAME, model_name, process_invocation.timeout_seconds) from timeout_error
-        except OSError as operating_system_error:
-            # TimeoutError is itself an OSError, so it must be caught first. Every other OSError here means the
-            # executable could not be started: missing, not executable, or not a valid program for this platform.
+        except ProcessStartFailedException as process_start_failed_exception:
             raise LlmCliStartFailedException(
                 CLAUDE_CODE_ASSISTANT_NAME,
                 self._claude_cli_settings.executable_path,
-                f"{type(operating_system_error).__name__}: {operating_system_error}",
+                process_start_failed_exception.operating_system_error_description,
                 START_FAILURE_REMEDY,
-            ) from operating_system_error
+            ) from process_start_failed_exception
+        except ProcessContainmentFailedException as process_containment_failed_exception:
+            raise LlmCliProcessContainmentFailedException(
+                CLAUDE_CODE_ASSISTANT_NAME, model_name, process_containment_failed_exception.operating_system_error_description
+            ) from process_containment_failed_exception
+        except ProcessResumeFailedException as process_resume_failed_exception:
+            raise LlmCliProcessResumeFailedException(
+                CLAUDE_CODE_ASSISTANT_NAME, model_name, process_resume_failed_exception.operating_system_error_description
+            ) from process_resume_failed_exception
+        except ProcessTimedOutException as process_timed_out_exception:
+            raise LlmSessionTimeoutException(
+                CLAUDE_CODE_ASSISTANT_NAME, model_name, process_invocation.timeout_seconds
+            ) from process_timed_out_exception
 
     @staticmethod
     def _map_to_transcript(claude_event_stream_resource: ClaudeEventStreamResource, event_stream_text: str) -> LlmSessionTranscript:
@@ -243,9 +259,7 @@ class GatewayLlmClaudeCli:
     def _read_tool_input_text(tool_kind: ToolKind, tool_input_json: str) -> str:
         # Keep what the model typed, not its JSON encoding. Encoded, a newline becomes a backslash and an "n",
         # so a command ending with a heredoc and then "python an.py" would hide the word boundary in front of "python".
-        tool_input: object = json.loads(tool_input_json)
-        if not isinstance(tool_input, dict):
-            return ""
-        tool_input_object: dict[str, object] = cast(dict[str, object], tool_input)
+        # ValidatorClaudeEventStreamResource refuses a tool input that is not a JSON object, so this one is.
+        tool_input_object: dict[str, object] = cast(dict[str, object], json.loads(tool_input_json))
         field_values: list[object] = [tool_input_object.get(field_name) for field_name in CLAUDE_TOOL_INPUT_FIELD_NAMES_BY_TOOL_KIND[tool_kind]]
         return TOOL_INPUT_LINE_SEPARATOR.join(field_value for field_value in field_values if isinstance(field_value, str))

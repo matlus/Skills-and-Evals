@@ -1,4 +1,5 @@
 import json
+from collections.abc import Iterable
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Final, cast, final
@@ -19,7 +20,11 @@ from prompt_evals.managers.data_managers.eval_suite_resources.eval_suite_resourc
     ReferenceLedgerResource,
     ToolUseCheckResource,
 )
-from prompt_evals.managers.exceptions.eval_suite_exceptions import EvalSuiteDefinitionInvalidException
+from prompt_evals.managers.exceptions.eval_suite_exceptions import (
+    EvalSuiteFileNotJsonException,
+    EvalSuiteFileNotJsonObjectException,
+    EvalSuiteFileValidationException,
+)
 from prompt_evals.managers.models.eval_suite_models import ToolKind
 
 type JsonObject = dict[str, object]
@@ -116,7 +121,7 @@ class ValidatorEvalSuiteResource:
 
     @staticmethod
     def _parse_ledger_entries(
-        entry_objects: list[JsonObject], reference_ledger_file: str, definition_problems: list[str]
+        entry_objects: Iterable[JsonObject], reference_ledger_file: str, definition_problems: list[str]
     ) -> tuple[LedgerEntryResource, ...]:
         ledger_entry_resources: list[LedgerEntryResource] = []
         entry_index: int
@@ -341,11 +346,9 @@ class ValidatorEvalSuiteResource:
         try:
             parsed_document: object = json.loads(json_text)
         except json.JSONDecodeError as json_decode_error:
-            raise EvalSuiteDefinitionInvalidException(
-                eval_suite_directory, [f"{file_label} is not valid JSON: {json_decode_error}"]
-            ) from json_decode_error
+            raise EvalSuiteFileNotJsonException(eval_suite_directory, file_label, str(json_decode_error)) from json_decode_error
         if not isinstance(parsed_document, dict):
-            raise EvalSuiteDefinitionInvalidException(eval_suite_directory, [f"{file_label} must contain a JSON object"])
+            raise EvalSuiteFileNotJsonObjectException(eval_suite_directory, file_label, type(parsed_document).__name__)
         return cast(JsonObject, parsed_document)
 
     @staticmethod
@@ -435,4 +438,4 @@ class ValidatorEvalSuiteResource:
     @staticmethod
     def _raise_if_any_problem(eval_suite_directory: Path, definition_problems: list[str]) -> None:
         if definition_problems:
-            raise EvalSuiteDefinitionInvalidException(eval_suite_directory, definition_problems)
+            raise EvalSuiteFileValidationException(eval_suite_directory, definition_problems)

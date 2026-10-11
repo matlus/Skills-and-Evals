@@ -2,7 +2,13 @@ import json
 from collections.abc import Iterable, Mapping
 from typing import Final, NoReturn, cast, final
 
-from prompt_evals.managers.exceptions.llm_session_exceptions import LlmSessionOutputMalformedException
+from prompt_evals.managers.exceptions.llm_session_exceptions import (
+    LlmSessionEventCountUnexpectedException,
+    LlmSessionEventFieldMissingException,
+    LlmSessionEventFieldTypeInvalidException,
+    LlmSessionEventLineNotJsonException,
+    LlmSessionEventLineNotJsonObjectException,
+)
 from prompt_evals.managers.gateways.codex_cli_resources.codex_event_stream_resources import (
     CodexAgentMessageResource,
     CodexCommandExecutionResource,
@@ -67,11 +73,9 @@ class ValidatorCodexEventStreamResource:
         try:
             parsed_event: object = json.loads(event_line)
         except json.JSONDecodeError as json_decode_error:
-            raise LlmSessionOutputMalformedException(
-                CODEX_ASSISTANT_NAME, requested_model_name, f"a line is not JSON: {event_line[:200]}"
-            ) from json_decode_error
+            raise LlmSessionEventLineNotJsonException(CODEX_ASSISTANT_NAME, requested_model_name, event_line) from json_decode_error
         if not isinstance(parsed_event, dict):
-            ValidatorCodexEventStreamResource._raise_malformed(requested_model_name, f"a line is not a JSON object: {event_line[:200]}")
+            raise LlmSessionEventLineNotJsonObjectException(CODEX_ASSISTANT_NAME, requested_model_name, event_line)
         return cast(JsonObject, parsed_event)
 
     @staticmethod
@@ -130,9 +134,7 @@ class ValidatorCodexEventStreamResource:
     def _require_single_turn_completed(events: Iterable[JsonObject], requested_model_name: str) -> None:
         turn_completed_count: int = sum(1 for event in events if event.get(EVENT_TYPE_FIELD) == EVENT_TYPE_TURN_COMPLETED)
         if turn_completed_count != 1:
-            ValidatorCodexEventStreamResource._raise_malformed(
-                requested_model_name, f"expected exactly one {EVENT_TYPE_TURN_COMPLETED} event, found {turn_completed_count}"
-            )
+            raise LlmSessionEventCountUnexpectedException(CODEX_ASSISTANT_NAME, requested_model_name, EVENT_TYPE_TURN_COMPLETED, turn_completed_count)
 
     @staticmethod
     def _parse_agent_messages(latest_items: Iterable[JsonObject], requested_model_name: str) -> tuple[CodexAgentMessageResource, ...]:
@@ -148,38 +150,38 @@ class ValidatorCodexEventStreamResource:
     @staticmethod
     def _parse_tool_items(latest_items: Iterable[JsonObject], requested_model_name: str) -> tuple[CodexToolItemResource, ...]:
         return tuple(
-            ValidatorCodexEventStreamResource._parse_tool_item(item, requested_model_name)
-            for item in latest_items
-            if item.get(EVENT_TYPE_FIELD) in TOOL_ITEM_TYPES
+            ValidatorCodexEventStreamResource._parse_tool_item(latest_item, requested_model_name)
+            for latest_item in latest_items
+            if latest_item.get(EVENT_TYPE_FIELD) in TOOL_ITEM_TYPES
         )
 
     @staticmethod
-    def _parse_tool_item(item: Mapping[str, object], requested_model_name: str) -> CodexToolItemResource:
-        if item.get(EVENT_TYPE_FIELD) == ITEM_TYPE_COMMAND_EXECUTION:
-            return ValidatorCodexEventStreamResource._parse_command_execution(item, requested_model_name)
-        return ValidatorCodexEventStreamResource._parse_file_change(item, requested_model_name)
+    def _parse_tool_item(codex_tool_item: Mapping[str, object], requested_model_name: str) -> CodexToolItemResource:
+        if codex_tool_item.get(EVENT_TYPE_FIELD) == ITEM_TYPE_COMMAND_EXECUTION:
+            return ValidatorCodexEventStreamResource._parse_command_execution(codex_tool_item, requested_model_name)
+        return ValidatorCodexEventStreamResource._parse_file_change(codex_tool_item, requested_model_name)
 
     @staticmethod
-    def _parse_command_execution(item: Mapping[str, object], requested_model_name: str) -> CodexCommandExecutionResource:
+    def _parse_command_execution(codex_command_execution_item: Mapping[str, object], requested_model_name: str) -> CodexCommandExecutionResource:
         return CodexCommandExecutionResource(
-            item_id=ValidatorCodexEventStreamResource._read_string(item, "id", requested_model_name),
-            command=ValidatorCodexEventStreamResource._read_string(item, "command", requested_model_name),
-            exit_code=ValidatorCodexEventStreamResource._read_optional_whole_number(item, "exit_code", requested_model_name),
-            status=ValidatorCodexEventStreamResource._read_string(item, "status", requested_model_name),
+            item_id=ValidatorCodexEventStreamResource._read_string(codex_command_execution_item, "id", requested_model_name),
+            command=ValidatorCodexEventStreamResource._read_string(codex_command_execution_item, "command", requested_model_name),
+            exit_code=ValidatorCodexEventStreamResource._read_optional_whole_number(codex_command_execution_item, "exit_code", requested_model_name),
+            status=ValidatorCodexEventStreamResource._read_string(codex_command_execution_item, "status", requested_model_name),
         )
 
     @staticmethod
-    def _parse_file_change(item: Mapping[str, object], requested_model_name: str) -> CodexFileChangeResource:
+    def _parse_file_change(codex_file_change_item: Mapping[str, object], requested_model_name: str) -> CodexFileChangeResource:
         return CodexFileChangeResource(
-            item_id=ValidatorCodexEventStreamResource._read_string(item, "id", requested_model_name),
+            item_id=ValidatorCodexEventStreamResource._read_string(codex_file_change_item, "id", requested_model_name),
             codex_file_update_resources=tuple(
                 CodexFileUpdateResource(
                     file_path=ValidatorCodexEventStreamResource._read_string(file_update, "path", requested_model_name),
                     change_kind=ValidatorCodexEventStreamResource._read_string(file_update, "kind", requested_model_name),
                 )
-                for file_update in ValidatorCodexEventStreamResource._read_object_list(item, "changes", requested_model_name)
+                for file_update in ValidatorCodexEventStreamResource._read_object_list(codex_file_change_item, "changes", requested_model_name)
             ),
-            status=ValidatorCodexEventStreamResource._read_string(item, "status", requested_model_name),
+            status=ValidatorCodexEventStreamResource._read_string(codex_file_change_item, "status", requested_model_name),
         )
 
     @staticmethod
@@ -189,8 +191,8 @@ class ValidatorCodexEventStreamResource:
             return None
         # bool is a subclass of int, so a JSON true would otherwise pass as the number 1.
         if not isinstance(field_value, int) or isinstance(field_value, bool):
-            ValidatorCodexEventStreamResource._raise_malformed(
-                requested_model_name, f"the field '{field_name}' is not a whole number or null: {field_value!r:.200}"
+            ValidatorCodexEventStreamResource._raise_field_type_invalid(
+                requested_model_name, f"the field '{field_name}'", "a whole number or null", field_value
             )
         return field_value
 
@@ -198,12 +200,12 @@ class ValidatorCodexEventStreamResource:
     def _read_object_list(json_object: Mapping[str, object], field_name: str, requested_model_name: str) -> list[JsonObject]:
         field_value: object = json_object.get(field_name)
         if not isinstance(field_value, list):
-            ValidatorCodexEventStreamResource._raise_malformed(requested_model_name, f"the field '{field_name}' is not a list: {field_value!r:.200}")
+            ValidatorCodexEventStreamResource._raise_field_type_invalid(requested_model_name, f"the field '{field_name}'", "a list", field_value)
         list_items: list[object] = cast(list[object], field_value)
         for list_item in list_items:
             if not isinstance(list_item, dict):
-                ValidatorCodexEventStreamResource._raise_malformed(
-                    requested_model_name, f"an entry of the field '{field_name}' is not a JSON object: {list_item!r:.200}"
+                ValidatorCodexEventStreamResource._raise_field_type_invalid(
+                    requested_model_name, f"an entry of the field '{field_name}'", "a JSON object", list_item
                 )
         return cast(list[JsonObject], list_items)
 
@@ -211,9 +213,8 @@ class ValidatorCodexEventStreamResource:
     def _read_object(json_object: Mapping[str, object], field_name: str, requested_model_name: str) -> JsonObject:
         field_value: object = json_object.get(field_name)
         if not isinstance(field_value, dict):
-            ValidatorCodexEventStreamResource._raise_malformed(
-                requested_model_name,
-                f"the field '{field_name}' of a {json_object.get(EVENT_TYPE_FIELD)} event is not a JSON object: {field_value!r:.200}",
+            ValidatorCodexEventStreamResource._raise_field_type_invalid(
+                requested_model_name, f"the field '{field_name}' of a {json_object.get(EVENT_TYPE_FIELD)} event", "a JSON object", field_value
             )
         return cast(JsonObject, field_value)
 
@@ -221,13 +222,13 @@ class ValidatorCodexEventStreamResource:
     def _read_string(json_object: Mapping[str, object], field_name: str, requested_model_name: str) -> str:
         field_value: object = json_object.get(field_name)
         if field_value is None:
-            ValidatorCodexEventStreamResource._raise_malformed(requested_model_name, f"the field '{field_name}' is missing")
+            raise LlmSessionEventFieldMissingException(CODEX_ASSISTANT_NAME, requested_model_name, field_name)
         if not isinstance(field_value, str):
-            ValidatorCodexEventStreamResource._raise_malformed(
-                requested_model_name, f"the field '{field_name}' is a {type(field_value).__name__}, not a string: {field_value!r:.200}"
-            )
+            ValidatorCodexEventStreamResource._raise_field_type_invalid(requested_model_name, f"the field '{field_name}'", "a string", field_value)
         return field_value
 
     @staticmethod
-    def _raise_malformed(requested_model_name: str, malformation_description: str) -> NoReturn:
-        raise LlmSessionOutputMalformedException(CODEX_ASSISTANT_NAME, requested_model_name, malformation_description)
+    def _raise_field_type_invalid(requested_model_name: str, field_description: str, expected_type_description: str, field_value: object) -> NoReturn:
+        raise LlmSessionEventFieldTypeInvalidException(
+            CODEX_ASSISTANT_NAME, requested_model_name, field_description, expected_type_description, field_value
+        )

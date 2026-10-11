@@ -11,7 +11,7 @@ from prompt_evals.managers.engines.processors.check_outcome_diagnosis_processor 
 from prompt_evals.managers.engines.processors.fact_check_grading_processor import FactCheckGradingProcessor
 from prompt_evals.managers.engines.processors.judge_check_grading_processor import JudgeCheckGradingProcessor
 from prompt_evals.managers.engines.processors.tool_use_check_grading_processor import ToolUseCheckGradingProcessor
-from prompt_evals.managers.exceptions.grading_exceptions import GraderResponseInvalidException
+from prompt_evals.managers.exceptions.grading_exceptions import GraderResponseBaseException
 from prompt_evals.managers.exceptions.llm_session_exceptions import SINGLE_SESSION_FAILURE_TYPES
 from prompt_evals.managers.exceptions.prompt_evals_exceptions import PromptEvalsTechnicalBaseException
 from prompt_evals.managers.gateways.gateway_llm_protocol import GatewayLlmProtocol
@@ -40,7 +40,7 @@ from prompt_evals.managers.models.grading_models import (
 )
 from prompt_evals.managers.models.trial_models import CompletedTrial, ErroredTrial, TrialIdentity, TrialRecord
 
-GRADER_FAILURE_TYPES: Final[tuple[type[PromptEvalsTechnicalBaseException], ...]] = (*SINGLE_SESSION_FAILURE_TYPES, GraderResponseInvalidException)
+GRADER_FAILURE_TYPES: Final[tuple[type[PromptEvalsTechnicalBaseException], ...]] = (*SINGLE_SESSION_FAILURE_TYPES, GraderResponseBaseException)
 
 
 @final

@@ -12,10 +12,11 @@ from acceptance_support.codex_event_stream_builder import CodexEventStreamBuilde
 from acceptance_support.random_data_generator import RandomDataGenerator
 from acceptance_support.sample_eval_suite_builder import CANDIDATE_VARIANT_NAME, CASE_NAME, SampleEvalSuite, SampleEvalSuiteBuilder
 from acceptance_support.scripted_cli_sessions import (
+    ScriptedClaudeEventStreamSession,
     ScriptedClaudeToolCall,
     ScriptedCodexCommandExecution,
-    ScriptedEventStreamSession,
-    ScriptedFailedStartSession,
+    ScriptedCodexEventStreamSession,
+    ScriptedTimedOutSession,
 )
 from acceptance_support.scripted_grader_sessions import script_correct_grading
 from acceptance_support.service_locator_testing import create_domain_facade
@@ -29,10 +30,10 @@ from prompt_evals import (
     EvaluationArtifact,
     EvaluationArtifactType,
     EvaluationRequest,
-    EvaluationRequestValidationException,
     RecordedCompletedTrial,
     RecordedTrial,
     RegradeRequest,
+    RegradeRequestValidationException,
     Scorecard,
     ScorecardTiming,
     TrialIdentity,
@@ -54,10 +55,10 @@ def create_trial_identity(repetition_number: int) -> TrialIdentity:
     return TrialIdentity(variant_name=CANDIDATE_VARIANT_NAME, case_name=CASE_NAME, repetition_number=repetition_number)
 
 
-def create_claude_session(duration_milliseconds: int = 1234) -> ScriptedEventStreamSession:
-    return ScriptedEventStreamSession(
+def create_claude_session(duration_milliseconds: int | None = 1234) -> ScriptedClaudeEventStreamSession:
+    return ScriptedClaudeEventStreamSession(
         final_text=f"Answer {RandomDataGenerator.create_random_sentence()}",
-        scripted_tool_calls=(
+        scripted_claude_tool_calls=(
             ScriptedClaudeToolCall(
                 tool_name="Bash", tool_input={"command": "python totals.py"}, tool_result_text=RandomDataGenerator.create_random_word()
             ),
@@ -68,9 +69,9 @@ def create_claude_session(duration_milliseconds: int = 1234) -> ScriptedEventStr
 
 def create_codex_event_stream() -> str:
     return CodexEventStreamBuilder.build_event_stream(
-        ScriptedEventStreamSession(
+        ScriptedCodexEventStreamSession(
             final_text=f"Answer {RandomDataGenerator.create_random_sentence()}",
-            scripted_tool_calls=(
+            scripted_codex_tool_calls=(
                 ScriptedCodexCommandExecution(command="python totals.py", aggregated_output=RandomDataGenerator.create_random_word()),
             ),
         )
@@ -128,11 +129,14 @@ def find_trial_timing_problems(trial_timing: TrialTiming) -> list[str]:
     return timing_problems
 
 
-def find_saved_timing_problems(artifact_recorder: ArtifactRecorder, trial_timing: TrialTiming) -> list[str]:
-    saved_durations: tuple[object, object] = (
-        read_json_field(artifact_recorder, EvaluationArtifactType.TRIAL_TIMING, trial_timing.trial_identity, "answer_duration_seconds"),
-        read_json_field(artifact_recorder, EvaluationArtifactType.TRIAL_GRADE, trial_timing.trial_identity, "grading_duration_seconds"),
+def read_saved_durations(artifact_recorder: ArtifactRecorder, trial_identity: TrialIdentity) -> tuple[object, object]:
+    return (
+        read_json_field(artifact_recorder, EvaluationArtifactType.TRIAL_TIMING, trial_identity, "answer_duration_seconds"),
+        read_json_field(artifact_recorder, EvaluationArtifactType.TRIAL_GRADE, trial_identity, "grading_duration_seconds"),
     )
+
+
+def find_saved_timing_problems(saved_durations: tuple[object, object], trial_timing: TrialTiming) -> list[str]:
     scorecard_durations: tuple[object, object] = (trial_timing.answer_duration_seconds, trial_timing.grading_duration_seconds)
     if saved_durations == scorecard_durations:
         return []
@@ -173,10 +177,17 @@ class TestEvaluationTimingExpectedPaths:
 
         # Assert
         actual_scorecard_timing: ScorecardTiming = actual_scorecard.scorecard_timing
+        saved_durations_by_trial_identity: dict[TrialIdentity, tuple[object, object]] = {
+            trial_timing.trial_identity: read_saved_durations(artifact_recorder, trial_timing.trial_identity)
+            for trial_timing in actual_scorecard_timing.trial_timings
+        }
         timing_problems: list[str] = [
             timing_problem
             for trial_timing in actual_scorecard_timing.trial_timings
-            for timing_problem in (*find_trial_timing_problems(trial_timing), *find_saved_timing_problems(artifact_recorder, trial_timing))
+            for timing_problem in (
+                *find_trial_timing_problems(trial_timing),
+                *find_saved_timing_problems(saved_durations_by_trial_identity[trial_timing.trial_identity], trial_timing),
+            )
         ]
         actual_trial_identities: list[TrialIdentity] = [trial_timing.trial_identity for trial_timing in actual_scorecard_timing.trial_timings]
         if actual_trial_identities != expected_trial_identities:
@@ -194,7 +205,7 @@ class TestEvaluationTimingExpectedPaths:
         # Arrange
         sample_eval_suite: SampleEvalSuite = SampleEvalSuiteBuilder.write_sample_eval_suite(tmp_path)
         test_mediator_coding_assistant_cli: TestMediatorCodingAssistantCli = TestMediatorCodingAssistantCli()
-        test_mediator_coding_assistant_cli.script_sessions((CANDIDATE_PROMPT_MARKER,), ScriptedFailedStartSession(raised_exception=TimeoutError()))
+        test_mediator_coding_assistant_cli.script_sessions((CANDIDATE_PROMPT_MARKER,), ScriptedTimedOutSession())
         expected_outcome: tuple[bool, float, list[str], tuple[int, int | None, int | None, int | None]] = (False, 0.0, [], (1, None, None, None))
 
         # Act
@@ -276,6 +287,43 @@ class TestEvaluationTimingExpectedPaths:
             f"expected the stream's {expected_answer_duration_seconds}s; actual {actual_answer_duration_seconds}"
         )
 
+    async def test_RegradeEvaluation_WhenAClaudeRecordingSavedNoAnswerTimeAndItsStreamReportsNoDuration_ThenItsAnswerAndTotalTimesAreNotRecorded(
+        self, tmp_path: Path
+    ) -> None:
+        # Arrange
+        sample_eval_suite: SampleEvalSuite = SampleEvalSuiteBuilder.write_sample_eval_suite(tmp_path)
+        recorded_completed_trial: RecordedCompletedTrial = RecordedCompletedTrial(
+            trial_identity=create_trial_identity(1),
+            event_stream_text=ClaudeEventStreamBuilder.build_event_stream(
+                f"model-{RandomDataGenerator.create_random_word()}", create_claude_session(duration_milliseconds=None)
+            ),
+            answer_duration_seconds=None,
+        )
+        test_mediator_coding_assistant_cli: TestMediatorCodingAssistantCli = TestMediatorCodingAssistantCli()
+        script_correct_grading(test_mediator_coding_assistant_cli, sample_eval_suite)
+        # A missing duration is not a run that took zero seconds, so it must not count as a measured answer time.
+        expected_outcome: tuple[float | None, tuple[bool, bool, bool]] = (None, (False, True, False))
+
+        # Act
+        actual_scorecard: Scorecard = await create_domain_facade_for(test_mediator_coding_assistant_cli).regrade_evaluation(
+            create_regrade_request(sample_eval_suite, (recorded_completed_trial,), CodingAssistant.CLAUDE_CODE),
+            ArtifactRecorder().record_evaluation_artifact,
+        )
+
+        # Assert
+        actual_variant_timing: VariantTiming = actual_scorecard.scorecard_timing.variant_timings[0]
+        actual_outcome: tuple[float | None, tuple[bool, bool, bool]] = (
+            actual_scorecard.scorecard_timing.trial_timings[0].answer_duration_seconds,
+            (
+                actual_variant_timing.answer_duration_summary is not None,
+                actual_variant_timing.grading_duration_summary is not None,
+                actual_variant_timing.total_duration_summary is not None,
+            ),
+        )
+        assert actual_outcome == expected_outcome, (
+            f"expected (answer time, (answer, grading, total) recorded) {expected_outcome}; actual {actual_outcome}"
+        )
+
     async def test_RegradeEvaluation_WhenACodexRecordingSavedNoAnswerTime_ThenItsAnswerAndTotalTimesAreNotRecorded(self, tmp_path: Path) -> None:
         # Arrange
         sample_eval_suite: SampleEvalSuite = SampleEvalSuiteBuilder.write_sample_eval_suite(tmp_path)
@@ -306,7 +354,7 @@ class TestEvaluationTimingExpectedPaths:
 
 @pytest.mark.acceptance
 class TestEvaluationTimingInvalidInput:
-    async def test_RegradeEvaluation_WhenARecordedAnswerTimeIsNotAFiniteNumberOfSeconds_ThenEvaluationRequestValidationExceptionNamesTheTrial(
+    async def test_RegradeEvaluation_WhenARecordedAnswerTimeIsNotAFiniteNumberOfSeconds_ThenRegradeRequestValidationExceptionNamesTheTrial(
         self, tmp_path: Path
     ) -> None:
         # Arrange
@@ -327,7 +375,7 @@ class TestEvaluationTimingInvalidInput:
         expected_contextual_entries_by_name: dict[str, object] = {VALIDATION_PROBLEM_COUNT_ENTRY_NAME: 1}
 
         # Act
-        with pytest.raises(EvaluationRequestValidationException) as exception_info:
+        with pytest.raises(RegradeRequestValidationException) as exception_info:
             await create_domain_facade_for(TestMediatorCodingAssistantCli()).regrade_evaluation(
                 create_regrade_request(sample_eval_suite, (recorded_completed_trial,), CodingAssistant.CLAUDE_CODE),
                 ArtifactRecorder().record_evaluation_artifact,
@@ -335,10 +383,10 @@ class TestEvaluationTimingInvalidInput:
 
         # Assert
         ExceptionAsserter.assert_expected_and_actual_are_equal(
-            expected_exception_type=EvaluationRequestValidationException,
+            expected_exception_type=RegradeRequestValidationException,
             expected_message_phrases=expected_message_phrases,
             expected_contextual_entries_by_name=expected_contextual_entries_by_name,
-            actual_exception=exception_info.value,
+            actual_prompt_evals_base_exception=exception_info.value,
         )
 
 

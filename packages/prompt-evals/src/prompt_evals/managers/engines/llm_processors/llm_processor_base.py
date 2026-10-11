@@ -4,7 +4,7 @@ from enum import StrEnum
 from typing import Final
 
 from prompt_evals.managers.configuration_providers.settings_models.grading_settings import GradingSettings
-from prompt_evals.managers.exceptions.grading_exceptions import GraderResponseInvalidException
+from prompt_evals.managers.exceptions.grading_exceptions import GraderResponseBaseException
 from prompt_evals.managers.gateways.gateway_llm_protocol import GatewayLlmProtocol
 from prompt_evals.managers.models.llm_session_models import LlmSessionRequest, LlmSessionTranscript
 
@@ -48,7 +48,7 @@ class LlmProcessorBase:
             llm_session_transcript: LlmSessionTranscript = await self._gateway_llm.run_session(llm_session_request)
             try:
                 return parse_structured_output(llm_session_transcript.structured_output_json, self._processor_name)
-            except GraderResponseInvalidException:
+            except GraderResponseBaseException:
                 if attempt_number >= GRADER_ATTEMPT_LIMIT:
                     raise
                 attempt_number += 1

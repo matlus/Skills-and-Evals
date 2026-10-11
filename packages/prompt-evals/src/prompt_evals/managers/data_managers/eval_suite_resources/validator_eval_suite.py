@@ -5,7 +5,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Final, final
 
-from prompt_evals.managers.exceptions.eval_suite_exceptions import EvalSuiteDefinitionInvalidException
+from prompt_evals.managers.exceptions.eval_suite_exceptions import EvalSuiteValidationException
 from prompt_evals.managers.models.eval_suite_models import (
     AmountCheckDefinition,
     CheckDefinition,
@@ -54,7 +54,7 @@ class ValidatorEvalSuite:
             ),
         ]
         if definition_problems:
-            raise EvalSuiteDefinitionInvalidException(eval_suite_directory, definition_problems)
+            raise EvalSuiteValidationException(eval_suite_directory, definition_problems)
 
     @staticmethod
     def _find_name_problems(eval_suite: EvalSuite) -> list[str]:

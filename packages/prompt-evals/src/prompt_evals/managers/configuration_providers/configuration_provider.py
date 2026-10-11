@@ -6,7 +6,15 @@ from prompt_evals.managers.configuration_providers.settings_models.claude_cli_se
 from prompt_evals.managers.configuration_providers.settings_models.codex_cli_settings import CodexCliSettings
 from prompt_evals.managers.configuration_providers.settings_models.grading_settings import GradingSettings
 from prompt_evals.managers.configuration_providers.settings_models.trial_execution_settings import TrialExecutionSettings
-from prompt_evals.managers.exceptions.configuration_exceptions import ConfigurationSettingException
+from prompt_evals.managers.exceptions.configuration_exceptions import (
+    ConfigurationSettingBlankException,
+    ConfigurationSettingNotNumberException,
+    ConfigurationSettingNotWholeNumberException,
+    ConfigurationSettingNumberOutOfRangeException,
+    ConfigurationSettingUnknownCodingAssistantException,
+    ConfigurationSettingUnknownEffortLevelException,
+    ConfigurationSettingWholeNumberOutOfRangeException,
+)
 from prompt_evals.managers.models.evaluation_models import CodingAssistant, EffortLevel
 
 CLAUDE_EXECUTABLE_VARIABLE: Final[str] = "PROMPT_EVALS_CLAUDE_EXECUTABLE"
@@ -66,7 +74,7 @@ class ConfigurationProvider:
             return default_value
         # A variable set to nothing is a mistake to report now, not a value to fail on after every paid trial has run.
         if not configured_value.strip():
-            raise ConfigurationSettingException(environment_variable_name, configured_value, "expected a non-blank value")
+            raise ConfigurationSettingBlankException(environment_variable_name, configured_value)
         return configured_value
 
     def _read_positive_number(self, environment_variable_name: str, default_value: str) -> float:
@@ -74,9 +82,9 @@ class ConfigurationProvider:
         try:
             configured_number: float = float(configured_value)
         except ValueError as value_error:
-            raise ConfigurationSettingException(environment_variable_name, configured_value, "expected a number of seconds") from value_error
+            raise ConfigurationSettingNotNumberException(environment_variable_name, configured_value) from value_error
         if not math.isfinite(configured_number) or configured_number <= 0:
-            raise ConfigurationSettingException(environment_variable_name, configured_value, "expected a finite number greater than zero")
+            raise ConfigurationSettingNumberOutOfRangeException(environment_variable_name, configured_value)
         return configured_number
 
     def _read_positive_integer(self, environment_variable_name: str, default_value: str) -> int:
@@ -84,9 +92,9 @@ class ConfigurationProvider:
         try:
             configured_integer: int = int(configured_value)
         except ValueError as value_error:
-            raise ConfigurationSettingException(environment_variable_name, configured_value, "expected a whole number") from value_error
+            raise ConfigurationSettingNotWholeNumberException(environment_variable_name, configured_value) from value_error
         if configured_integer < 1:
-            raise ConfigurationSettingException(environment_variable_name, configured_value, "expected a whole number of at least 1")
+            raise ConfigurationSettingWholeNumberOutOfRangeException(environment_variable_name, configured_value)
         return configured_integer
 
     def _read_effort_level(self, environment_variable_name: str, default_value: str) -> EffortLevel:
@@ -95,7 +103,7 @@ class ConfigurationProvider:
             return EffortLevel(configured_value)
         except ValueError as value_error:
             effort_level_names: str = ", ".join(effort_level.value for effort_level in EffortLevel)
-            raise ConfigurationSettingException(environment_variable_name, configured_value, f"expected one of {effort_level_names}") from value_error
+            raise ConfigurationSettingUnknownEffortLevelException(environment_variable_name, configured_value, effort_level_names) from value_error
 
     def _read_coding_assistant(self, environment_variable_name: str, default_value: str) -> CodingAssistant:
         configured_value: str = self._read_setting(environment_variable_name, default_value)
@@ -103,6 +111,6 @@ class ConfigurationProvider:
             return CodingAssistant(configured_value)
         except ValueError as value_error:
             coding_assistant_names: str = ", ".join(coding_assistant.value for coding_assistant in CodingAssistant)
-            raise ConfigurationSettingException(
-                environment_variable_name, configured_value, f"expected one of {coding_assistant_names}"
+            raise ConfigurationSettingUnknownCodingAssistantException(
+                environment_variable_name, configured_value, coding_assistant_names
             ) from value_error

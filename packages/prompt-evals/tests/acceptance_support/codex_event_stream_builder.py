@@ -3,9 +3,9 @@ from typing import Final
 
 from acceptance_support.scripted_cli_sessions import (
     ScriptedCodexCommandExecution,
+    ScriptedCodexEventStreamSession,
     ScriptedCodexFileChange,
-    ScriptedEventStreamSession,
-    ScriptedToolCallItem,
+    ScriptedCodexToolCall,
 )
 
 ITEM_STATUS_IN_PROGRESS: Final[str] = "in_progress"
@@ -19,71 +19,69 @@ class CodexEventStreamBuilder:
     """Builds the newline-delimited JSON a real `codex exec --json` run prints."""
 
     @staticmethod
-    def build_event_stream(scripted_event_stream_session: ScriptedEventStreamSession) -> str:
+    def build_event_stream(scripted_codex_event_stream_session: ScriptedCodexEventStreamSession) -> str:
         event_lines: list[str] = [
             CodexEventStreamBuilder._serialize_event({"type": "thread.started", "thread_id": "0199a213-81c0-7800-8aa1-bbab2a035a53"}),
             CodexEventStreamBuilder._serialize_event({"type": "turn.started"}),
             CodexEventStreamBuilder._build_item_event("item.completed", {"id": "item_0", "type": "error", "message": UNKNOWN_MODEL_WARNING}),
         ]
         item_number: int
-        scripted_tool_call_item: ScriptedToolCallItem
-        for item_number, scripted_tool_call_item in enumerate(scripted_event_stream_session.scripted_tool_calls, start=1):
-            event_lines.extend(CodexEventStreamBuilder._build_tool_item_events(f"item_{item_number}", scripted_tool_call_item))
-        final_item_id: str = f"item_{len(scripted_event_stream_session.scripted_tool_calls) + 1}"
-        if scripted_event_stream_session.is_error:
-            event_lines.extend(CodexEventStreamBuilder._build_turn_failure_events(scripted_event_stream_session))
+        scripted_codex_tool_call: ScriptedCodexToolCall
+        for item_number, scripted_codex_tool_call in enumerate(scripted_codex_event_stream_session.scripted_codex_tool_calls, start=1):
+            event_lines.extend(CodexEventStreamBuilder._build_tool_item_events(f"item_{item_number}", scripted_codex_tool_call))
+        final_item_id: str = f"item_{len(scripted_codex_event_stream_session.scripted_codex_tool_calls) + 1}"
+        if scripted_codex_event_stream_session.is_error:
+            event_lines.extend(CodexEventStreamBuilder._build_turn_failure_events(scripted_codex_event_stream_session))
         else:
-            event_lines.extend(CodexEventStreamBuilder._build_turn_completion_events(final_item_id, scripted_event_stream_session))
+            event_lines.extend(CodexEventStreamBuilder._build_turn_completion_events(final_item_id, scripted_codex_event_stream_session))
         return "\n".join(event_lines) + "\n"
 
     @staticmethod
-    def _build_tool_item_events(item_id: str, scripted_tool_call_item: ScriptedToolCallItem) -> list[str]:
-        match scripted_tool_call_item:
+    def _build_tool_item_events(item_id: str, scripted_codex_tool_call: ScriptedCodexToolCall) -> list[str]:
+        match scripted_codex_tool_call:
             case ScriptedCodexCommandExecution():
-                return CodexEventStreamBuilder._build_command_execution_events(item_id, scripted_tool_call_item)
+                return CodexEventStreamBuilder._build_command_execution_events(item_id, scripted_codex_tool_call)
             case ScriptedCodexFileChange():
-                return CodexEventStreamBuilder._build_file_change_events(item_id, scripted_tool_call_item)
-            case _:
-                raise AssertionError(f"The test scripted a {type(scripted_tool_call_item).__name__} for a Codex session")
+                return CodexEventStreamBuilder._build_file_change_events(item_id, scripted_codex_tool_call)
 
     @staticmethod
-    def _build_command_execution_events(item_id: str, scripted_command_execution: ScriptedCodexCommandExecution) -> list[str]:
+    def _build_command_execution_events(item_id: str, scripted_codex_command_execution: ScriptedCodexCommandExecution) -> list[str]:
         started_item: dict[str, object] = {
             "id": item_id,
             "type": "command_execution",
-            "command": scripted_command_execution.command,
+            "command": scripted_codex_command_execution.command,
             "aggregated_output": "",
             "exit_code": None,
             "status": ITEM_STATUS_IN_PROGRESS,
         }
         command_events: list[str] = [CodexEventStreamBuilder._build_item_event("item.started", started_item)]
-        if scripted_command_execution.status != ITEM_STATUS_IN_PROGRESS:
+        if scripted_codex_command_execution.execution_status != ITEM_STATUS_IN_PROGRESS:
             completed_item: dict[str, object] = started_item | {
-                "aggregated_output": scripted_command_execution.aggregated_output,
-                "exit_code": scripted_command_execution.exit_code,
-                "status": scripted_command_execution.status,
+                "aggregated_output": scripted_codex_command_execution.aggregated_output,
+                "exit_code": scripted_codex_command_execution.exit_code,
+                "status": scripted_codex_command_execution.execution_status,
             }
             command_events.append(CodexEventStreamBuilder._build_item_event("item.completed", completed_item))
         return command_events
 
     @staticmethod
-    def _build_file_change_events(item_id: str, scripted_file_change: ScriptedCodexFileChange) -> list[str]:
+    def _build_file_change_events(item_id: str, scripted_codex_file_change: ScriptedCodexFileChange) -> list[str]:
         file_change_item: dict[str, object] = {
             "id": item_id,
             "type": "file_change",
-            "changes": [{"path": scripted_file_change.file_path, "kind": scripted_file_change.change_kind}],
-            "status": scripted_file_change.status,
+            "changes": [{"path": scripted_codex_file_change.file_path, "kind": scripted_codex_file_change.change_kind}],
+            "status": scripted_codex_file_change.change_status,
         }
-        item_event_type: str = "item.started" if scripted_file_change.status == ITEM_STATUS_IN_PROGRESS else "item.completed"
+        item_event_type: str = "item.started" if scripted_codex_file_change.change_status == ITEM_STATUS_IN_PROGRESS else "item.completed"
         return [CodexEventStreamBuilder._build_item_event(item_event_type, file_change_item)]
 
     @staticmethod
-    def _build_turn_completion_events(final_item_id: str, scripted_event_stream_session: ScriptedEventStreamSession) -> list[str]:
+    def _build_turn_completion_events(final_item_id: str, scripted_codex_event_stream_session: ScriptedCodexEventStreamSession) -> list[str]:
         # With --output-schema, Codex answers with the structured output as the text of its final message.
         final_message_text: str = (
-            scripted_event_stream_session.final_text
-            if scripted_event_stream_session.structured_output is None
-            else json.dumps(scripted_event_stream_session.structured_output, ensure_ascii=False)
+            scripted_codex_event_stream_session.final_text
+            if scripted_codex_event_stream_session.structured_output is None
+            else json.dumps(scripted_codex_event_stream_session.structured_output, ensure_ascii=False)
         )
         turn_completed_event: str = CodexEventStreamBuilder._serialize_event(
             {
@@ -105,8 +103,8 @@ class CodexEventStreamBuilder:
         return [final_message_event, turn_completed_event]
 
     @staticmethod
-    def _build_turn_failure_events(scripted_event_stream_session: ScriptedEventStreamSession) -> list[str]:
-        provider_messages: tuple[str, ...] = scripted_event_stream_session.error_messages or (scripted_event_stream_session.final_text,)
+    def _build_turn_failure_events(scripted_codex_event_stream_session: ScriptedCodexEventStreamSession) -> list[str]:
+        provider_messages: tuple[str, ...] = scripted_codex_event_stream_session.error_messages or (scripted_codex_event_stream_session.final_text,)
         failure_texts: list[str] = [
             json.dumps({"status": FAILED_REQUEST_STATUS, "error": {"type": "invalid_request_error", "message": provider_message}})
             for provider_message in provider_messages

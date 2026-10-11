@@ -22,8 +22,8 @@ class ClaudeResultResource:
     is_error: bool
     result_text: str
     structured_output_json: str | None
-    duration_milliseconds: int
-    total_cost_usd: Decimal
+    duration_milliseconds: int | None
+    total_cost_usd: Decimal | None
     error_messages: tuple[str, ...]
 
 

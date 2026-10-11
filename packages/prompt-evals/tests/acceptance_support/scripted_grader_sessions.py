@@ -3,7 +3,7 @@ from typing import Final
 
 from acceptance_support.random_data_generator import RandomDataGenerator
 from acceptance_support.sample_eval_suite_builder import STATUS_FACT_NAME, TOTAL_FACT_NAME, SampleEvalSuite
-from acceptance_support.scripted_cli_sessions import ScriptedEventStreamSession
+from acceptance_support.scripted_cli_sessions import ScriptedAnswerSession
 from acceptance_support.test_mediator_coding_assistant_cli import TestMediatorCodingAssistantCli
 
 FACT_EXTRACTION_PROMPT_HEADING: Final[str] = "# Fact extraction task"
@@ -19,13 +19,38 @@ class ScriptedDisputedAmount:
     reference_amount_text: str
 
 
-def create_extraction_session(reported_total: str | None, reported_status: str) -> ScriptedEventStreamSession:
-    # Graders use no tools, so the same scripted session prints correctly in whichever assistant the graders run in.
-    return ScriptedEventStreamSession(structured_output={TOTAL_FACT_NAME: reported_total, STATUS_FACT_NAME: reported_status})
+def create_judge_verdict_schema_document() -> dict[str, object]:
+    """The JSON schema every judgment session must answer through, as the grader's CLI receives it."""
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["passed", "reason", "disputed_amounts"],
+        "properties": {
+            "passed": {"type": "boolean"},
+            "reason": {"type": "string"},
+            "disputed_amounts": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["description", "answer_amount", "reference_amount"],
+                    "properties": {
+                        "description": {"type": "string"},
+                        "answer_amount": {"type": "string"},
+                        "reference_amount": {"type": "string"},
+                    },
+                },
+            },
+        },
+    }
 
 
-def create_judge_session(*, is_passed: bool, reason: str, disputed_amounts: tuple[ScriptedDisputedAmount, ...] = ()) -> ScriptedEventStreamSession:
-    return ScriptedEventStreamSession(
+def create_extraction_session(reported_total: str, reported_status: str) -> ScriptedAnswerSession:
+    return ScriptedAnswerSession(structured_output={TOTAL_FACT_NAME: reported_total, STATUS_FACT_NAME: reported_status})
+
+
+def create_judge_session(*, is_passed: bool, reason: str, disputed_amounts: tuple[ScriptedDisputedAmount, ...] = ()) -> ScriptedAnswerSession:
+    return ScriptedAnswerSession(
         structured_output={
             "passed": is_passed,
             "reason": reason,

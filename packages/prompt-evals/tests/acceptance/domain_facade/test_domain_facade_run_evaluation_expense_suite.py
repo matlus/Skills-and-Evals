@@ -8,7 +8,7 @@ import pytest
 from acceptance_support.artifact_recorder import ArtifactRecorder
 from acceptance_support.asserters.scorecard_asserter import ExpectedScorecard, ExpectedScorecardRow, ScorecardAsserter
 from acceptance_support.random_data_generator import RandomDataGenerator
-from acceptance_support.scripted_cli_sessions import ScriptedClaudeToolCall, ScriptedEventStreamSession
+from acceptance_support.scripted_cli_sessions import ScriptedAnswerSession, ScriptedClaudeEventStreamSession, ScriptedClaudeToolCall
 from acceptance_support.service_locator_testing import create_domain_facade
 from acceptance_support.test_mediator_coding_assistant_cli import TestMediatorCodingAssistantCli
 
@@ -110,9 +110,9 @@ class TestRunEvaluationExpenseSuiteDefinition:
         test_mediator_coding_assistant_cli: TestMediatorCodingAssistantCli = TestMediatorCodingAssistantCli()
         test_mediator_coding_assistant_cli.script_sessions(
             (attachment_note,),
-            ScriptedEventStreamSession(
+            ScriptedClaudeEventStreamSession(
                 final_text=RandomDataGenerator.create_random_sentence(),
-                scripted_tool_calls=(
+                scripted_claude_tool_calls=(
                     ScriptedClaudeToolCall(
                         tool_name=CLAUDE_SHELL_TOOL_NAME,
                         tool_input={"command": SCRIPTED_ANALYSIS_COMMAND},
@@ -123,13 +123,11 @@ class TestRunEvaluationExpenseSuiteDefinition:
         )
         test_mediator_coding_assistant_cli.script_sessions(
             (FACT_EXTRACTION_PROMPT_HEADING,),
-            ScriptedEventStreamSession(structured_output=dict(reference_key_fact_value_by_fact_name)),
+            ScriptedAnswerSession(structured_output=dict(reference_key_fact_value_by_fact_name)),
         )
         test_mediator_coding_assistant_cli.script_sessions(
             (JUDGMENT_PROMPT_HEADING,),
-            ScriptedEventStreamSession(
-                structured_output={"passed": True, "reason": RandomDataGenerator.create_random_sentence(), "disputed_amounts": []}
-            ),
+            ScriptedAnswerSession(structured_output={"passed": True, "reason": RandomDataGenerator.create_random_sentence(), "disputed_amounts": []}),
         )
         domain_facade: DomainFacade = create_domain_facade(
             test_mediator_coding_assistant_cli, {"PROMPT_EVALS_GRADER_MODEL": f"grader-{RandomDataGenerator.create_random_word()}"}

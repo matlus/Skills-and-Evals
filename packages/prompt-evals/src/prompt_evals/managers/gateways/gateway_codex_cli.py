@@ -6,11 +6,19 @@ from typing import Final, NoReturn, final
 
 from prompt_evals.managers.configuration_providers.settings_models.codex_cli_settings import CodexCliSettings
 from prompt_evals.managers.exceptions.llm_session_exceptions import (
+    LlmCliProcessContainmentFailedException,
+    LlmCliProcessResumeFailedException,
     LlmCliStartFailedException,
     LlmSessionExitedWithErrorException,
     LlmSessionFailedException,
-    LlmSessionOutputMalformedException,
+    LlmSessionOutputMalformedBaseException,
     LlmSessionTimeoutException,
+)
+from prompt_evals.managers.exceptions.process_runner_exceptions import (
+    ProcessContainmentFailedException,
+    ProcessResumeFailedException,
+    ProcessStartFailedException,
+    ProcessTimedOutException,
 )
 from prompt_evals.managers.gateways.codex_cli_resources.codex_event_stream_resources import (
     CodexAgentMessageResource,
@@ -174,17 +182,23 @@ class GatewayLlmCodexCli:
     async def _run_codex_process(self, process_invocation: ProcessInvocation, model_name: str) -> ProcessOutcome:
         try:
             return await self._process_runner.run_process(process_invocation)
-        except TimeoutError as timeout_error:
-            raise LlmSessionTimeoutException(CODEX_ASSISTANT_NAME, model_name, process_invocation.timeout_seconds) from timeout_error
-        except OSError as operating_system_error:
-            # TimeoutError is itself an OSError, so it must be caught first. Every other OSError here means the
-            # executable could not be started: missing, not executable, or not a valid program for this platform.
+        except ProcessStartFailedException as process_start_failed_exception:
             raise LlmCliStartFailedException(
                 CODEX_ASSISTANT_NAME,
                 self._codex_cli_settings.executable_path,
-                f"{type(operating_system_error).__name__}: {operating_system_error}",
+                process_start_failed_exception.operating_system_error_description,
                 START_FAILURE_REMEDY,
-            ) from operating_system_error
+            ) from process_start_failed_exception
+        except ProcessContainmentFailedException as process_containment_failed_exception:
+            raise LlmCliProcessContainmentFailedException(
+                CODEX_ASSISTANT_NAME, model_name, process_containment_failed_exception.operating_system_error_description
+            ) from process_containment_failed_exception
+        except ProcessResumeFailedException as process_resume_failed_exception:
+            raise LlmCliProcessResumeFailedException(
+                CODEX_ASSISTANT_NAME, model_name, process_resume_failed_exception.operating_system_error_description
+            ) from process_resume_failed_exception
+        except ProcessTimedOutException as process_timed_out_exception:
+            raise LlmSessionTimeoutException(CODEX_ASSISTANT_NAME, model_name, process_invocation.timeout_seconds) from process_timed_out_exception
 
     @staticmethod
     def _measure_elapsed_milliseconds(started_monotonic_seconds: float) -> int:
@@ -212,7 +226,7 @@ class GatewayLlmCodexCli:
         """None when the output of a failed process is not a readable event stream; the exit code then explains the failure."""
         try:
             return ValidatorCodexEventStreamResource.parse_event_stream(event_stream_text, model_name)
-        except LlmSessionOutputMalformedException:
+        except LlmSessionOutputMalformedBaseException:
             return None
 
     @staticmethod
