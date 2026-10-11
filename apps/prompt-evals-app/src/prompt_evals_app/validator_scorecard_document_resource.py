@@ -9,7 +9,16 @@ from prompt_evals_app.scorecard_document_resources import (
     ScorecardRowResource,
     VariantTimingResource,
 )
-from prompt_evals_app.scorecard_summary_unreadable_exception import ScorecardSummaryUnreadableException
+from prompt_evals_app.scorecard_summary_exceptions import (
+    ScorecardSummaryFieldNotBooleanException,
+    ScorecardSummaryFieldNotCountException,
+    ScorecardSummaryFieldNotObjectException,
+    ScorecardSummaryFieldNotObjectListException,
+    ScorecardSummaryFieldNotSecondsException,
+    ScorecardSummaryFieldNotTextException,
+    ScorecardSummaryNotJsonException,
+    ScorecardSummaryNotObjectException,
+)
 
 type JsonObject = dict[str, object]
 
@@ -67,9 +76,9 @@ class ValidatorScorecardDocumentResource:
         try:
             scorecard_document: object = json.loads(scorecard_text)
         except json.JSONDecodeError as invalid_scorecard:
-            raise ScorecardSummaryUnreadableException(f"{scorecard_path} is not valid JSON: {invalid_scorecard}") from invalid_scorecard
+            raise ScorecardSummaryNotJsonException(scorecard_path, str(invalid_scorecard)) from invalid_scorecard
         if not isinstance(scorecard_document, dict):
-            raise ScorecardSummaryUnreadableException(f"{scorecard_path} must hold a JSON object; it holds {type(scorecard_document).__name__}")
+            raise ScorecardSummaryNotObjectException(scorecard_path, type(scorecard_document).__name__)
         return cast(JsonObject, scorecard_document)
 
     @staticmethod
@@ -126,28 +135,28 @@ class ValidatorScorecardDocumentResource:
     def _read_object(json_object: JsonObject, field_name: str, scorecard_path: Path) -> JsonObject:
         field_value: object = json_object.get(field_name)
         if not isinstance(field_value, dict):
-            raise ScorecardSummaryUnreadableException(f"{scorecard_path}: {field_name} must be a JSON object; it holds {field_value!r}")
+            raise ScorecardSummaryFieldNotObjectException(scorecard_path, field_name, repr(field_value))
         return cast(JsonObject, field_value)
 
     @staticmethod
     def _read_object_list(json_object: JsonObject, field_name: str, scorecard_path: Path) -> list[JsonObject]:
         field_value: object = json_object.get(field_name)
         if not isinstance(field_value, list) or not all(isinstance(list_item, dict) for list_item in cast(list[object], field_value)):
-            raise ScorecardSummaryUnreadableException(f"{scorecard_path}: {field_name} must be a list of JSON objects; it holds {field_value!r}")
+            raise ScorecardSummaryFieldNotObjectListException(scorecard_path, field_name, repr(field_value))
         return cast(list[JsonObject], field_value)
 
     @staticmethod
     def _read_string(json_object: JsonObject, field_name: str, scorecard_path: Path, default_value: str | None = None) -> str:
         field_value: object = json_object.get(field_name, default_value)
         if not isinstance(field_value, str):
-            raise ScorecardSummaryUnreadableException(f"{scorecard_path}: {field_name} must be a string; it holds {field_value!r}")
+            raise ScorecardSummaryFieldNotTextException(scorecard_path, field_name, repr(field_value))
         return field_value
 
     @staticmethod
     def _read_bool(json_object: JsonObject, field_name: str, scorecard_path: Path) -> bool:
         field_value: object = json_object.get(field_name)
         if not isinstance(field_value, bool):
-            raise ScorecardSummaryUnreadableException(f"{scorecard_path}: {field_name} must be true or false; it holds {field_value!r}")
+            raise ScorecardSummaryFieldNotBooleanException(scorecard_path, field_name, repr(field_value))
         return field_value
 
     @staticmethod
@@ -155,22 +164,25 @@ class ValidatorScorecardDocumentResource:
         field_value: object = json_object.get(field_name)
         # bool is a subclass of int, so true would otherwise read as a count of one.
         if isinstance(field_value, bool) or not isinstance(field_value, int) or field_value < 0:
-            raise ScorecardSummaryUnreadableException(
-                f"{scorecard_path}: {field_name} must be a whole number of zero or more; it holds {field_value!r}"
-            )
+            raise ScorecardSummaryFieldNotCountException(scorecard_path, field_name, repr(field_value))
         return field_value
 
     @staticmethod
     def _read_seconds(json_object: JsonObject, field_name: str, scorecard_path: Path) -> float:
         field_value: object = json_object.get(field_name)
-        unreadable_message: str = f"{scorecard_path}: {field_name} must be a finite number of seconds of zero or more; it holds {field_value!r}"
+        seconds: float | None = ValidatorScorecardDocumentResource._as_seconds(field_value)
+        if seconds is None:
+            raise ScorecardSummaryFieldNotSecondsException(scorecard_path, field_name, repr(field_value))
+        return seconds
+
+    @staticmethod
+    def _as_seconds(field_value: object) -> float | None:
+        """The value as a finite, non-negative number of seconds, or None when it is not one."""
         if isinstance(field_value, bool) or not isinstance(field_value, int | float):
-            raise ScorecardSummaryUnreadableException(unreadable_message)
+            return None
         try:
             seconds: float = float(field_value)
-        except OverflowError as too_large_value:
-            raise ScorecardSummaryUnreadableException(unreadable_message) from too_large_value
+        except OverflowError:
+            return None
         # json.loads reads NaN and Infinity; NaN fails the comparison.
-        if not 0 <= seconds < math.inf:
-            raise ScorecardSummaryUnreadableException(unreadable_message)
-        return seconds
+        return seconds if 0 <= seconds < math.inf else None

@@ -6,8 +6,23 @@ from typing import Final
 
 import pytest
 
-from prompt_evals import CodingAssistant, EffortLevel, RecordedCompletedTrial, TrialIdentity
-from prompt_evals_app.recorded_run_reader import RecordedRun, RecordedRunReader, RecordedRunUnreadableException
+from prompt_evals import (
+    CodingAssistant,
+    EffortLevel,
+    PromptEvalsBusinessBaseException,
+    PromptEvalsTechnicalBaseException,
+    RecordedCompletedTrial,
+    TrialIdentity,
+)
+from prompt_evals_app.recorded_run_exceptions import (
+    RecordedRunFileNotUtf8Exception,
+    RecordedRunFileReadFailedException,
+    RecordedRunScorecardMissingException,
+    RecordedRunSettingsNotTextException,
+    RecordedRunSettingUnknownException,
+    RecordedTrialAnswerDurationInvalidException,
+)
+from prompt_evals_app.recorded_run_reader import RecordedRun, RecordedRunReader
 
 INVALID_UTF8_BYTES: Final[bytes] = b"\xff\xfe\xfa"
 TRIAL_DIRECTORY_PARTS: Final[tuple[str, ...]] = ("trials", "standard", "refund", "run-07")
@@ -50,7 +65,7 @@ class TestRecordedRunReader:
         (trial_directory / "event_stream.jsonl").write_bytes(INVALID_UTF8_BYTES)
 
         # Act / Assert
-        with pytest.raises(RecordedRunUnreadableException, match=re.escape("event_stream.jsonl cannot be read")):
+        with pytest.raises(RecordedRunFileNotUtf8Exception, match=re.escape("event_stream.jsonl is not UTF-8 text")):
             RecordedRunReader.read_recorded_run(tmp_path, CodingAssistant.CLAUDE_CODE)
 
     def test_ReadRecordedRun_WhenScorecardIsNotUtf8_ThenRunIsUnreadable(self, tmp_path: Path) -> None:
@@ -59,7 +74,7 @@ class TestRecordedRunReader:
         (tmp_path / "scorecard.json").write_bytes(INVALID_UTF8_BYTES)
 
         # Act / Assert
-        with pytest.raises(RecordedRunUnreadableException, match=re.escape("scorecard.json cannot be read")):
+        with pytest.raises(RecordedRunFileNotUtf8Exception, match=re.escape("scorecard.json is not UTF-8 text")):
             RecordedRunReader.read_recorded_run(tmp_path, CodingAssistant.CLAUDE_CODE)
 
     def test_ReadRecordedRun_WhenEffortLevelIsNotAString_ThenMessageNamesOnlyThatField(self, tmp_path: Path) -> None:
@@ -69,7 +84,7 @@ class TestRecordedRunReader:
         write_run_directory(tmp_path, scorecard_object)
 
         # Act
-        with pytest.raises(RecordedRunUnreadableException) as raised_error:
+        with pytest.raises(RecordedRunSettingsNotTextException) as raised_error:
             RecordedRunReader.read_recorded_run(tmp_path, CodingAssistant.CLAUDE_CODE)
 
         # Assert
@@ -87,7 +102,7 @@ class TestRecordedRunReader:
         write_run_directory(tmp_path, scorecard_object)
 
         # Act
-        with pytest.raises(RecordedRunUnreadableException) as raised_error:
+        with pytest.raises(RecordedRunSettingUnknownException) as raised_error:
             RecordedRunReader.read_recorded_run(tmp_path, CodingAssistant.CLAUDE_CODE)
 
         # Assert
@@ -134,7 +149,46 @@ class TestRecordedRunReader:
 
         # Act / Assert
         with pytest.raises(
-            RecordedRunUnreadableException,
+            RecordedTrialAnswerDurationInvalidException,
             match=re.escape("must hold a finite number of seconds of zero or more, or null, for answer_duration_seconds"),
         ):
             RecordedRunReader.read_recorded_run(tmp_path, CodingAssistant.CLAUDE_CODE)
+
+    def test_ReadRecordedRun_WhenTheFolderHasNoScorecard_ThenTheCallerIsToldItIsNotARunThisAppWrote(self, tmp_path: Path) -> None:
+        # Arrange
+        write_run_directory(tmp_path, create_valid_scorecard_object())
+        (tmp_path / "scorecard.json").unlink()
+        expected_is_business: bool = True
+
+        # Act
+        with pytest.raises(RecordedRunScorecardMissingException, match=re.escape("scorecard.json does not exist")) as raised_error:
+            RecordedRunReader.read_recorded_run(tmp_path, CodingAssistant.CLAUDE_CODE)
+
+        # Assert
+        actual_is_business: bool = isinstance(raised_error.value, PromptEvalsBusinessBaseException)
+        assert actual_is_business == expected_is_business, "a folder that is not a run is the caller's to correct, so it must be a business exception"
+
+    def test_ReadRecordedRun_WhenTheOperatingSystemCannotReadAFile_ThenItIsATechnicalFailure(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Arrange
+        trial_directory: Path = write_run_directory(tmp_path, create_valid_scorecard_object())
+        event_stream_path: Path = trial_directory / "event_stream.jsonl"
+        expected_read_error: str = "access is denied"
+        expected_is_technical: bool = True
+        original_read_text = Path.read_text
+
+        def read_text_denied_for_event_stream(file_path: Path, *arguments: object, **keyword_arguments: object) -> str:
+            if file_path == event_stream_path:
+                raise PermissionError(expected_read_error)
+            return original_read_text(file_path, *arguments, **keyword_arguments)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(Path, "read_text", read_text_denied_for_event_stream)
+
+        # Act
+        with pytest.raises(RecordedRunFileReadFailedException, match=re.escape(expected_read_error)) as raised_error:
+            RecordedRunReader.read_recorded_run(tmp_path, CodingAssistant.CLAUDE_CODE)
+
+        # Assert
+        actual_is_technical: bool = isinstance(raised_error.value, PromptEvalsTechnicalBaseException)
+        assert actual_is_technical == expected_is_technical, "a file the operating system cannot read is ours to fix, so it must be technical"
