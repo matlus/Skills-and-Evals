@@ -14,5 +14,9 @@ class RandomDataGenerator:
         return " ".join(RandomDataGenerator.create_random_word() for _ in range(word_count)).capitalize() + "."
 
     @staticmethod
+    def create_random_process_id() -> int:
+        return secrets.randbelow(60_000) + 1_000
+
+    @staticmethod
     def create_random_amount_text() -> str:
         return f"{secrets.randbelow(9_000) + 100}.{secrets.randbelow(100):02d}"

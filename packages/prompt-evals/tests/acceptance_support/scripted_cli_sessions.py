@@ -13,12 +13,12 @@ class ScriptedClaudeToolCall:
 
 @dataclass(frozen=True)
 class ScriptedCodexCommandExecution:
-    """A Codex shell command. A status of "in_progress" reports only its start, as when the session ends while it runs."""
+    """A Codex shell command. An execution status of "in_progress" reports only its start, as when the session ends while it runs."""
 
     command: str
     aggregated_output: str = ""
     exit_code: int | None = 0
-    status: str = "completed"
+    execution_status: str = "completed"
 
 
 @dataclass(frozen=True)
@@ -27,31 +27,51 @@ class ScriptedCodexFileChange:
 
     file_path: str
     change_kind: str
-    status: str = "completed"
+    change_status: str = "completed"
 
 
-type ScriptedToolCallItem = ScriptedClaudeToolCall | ScriptedCodexCommandExecution | ScriptedCodexFileChange
+type ScriptedCodexToolCall = ScriptedCodexCommandExecution | ScriptedCodexFileChange
 
 
 @dataclass(frozen=True)
-class ScriptedEventStreamSession:
-    """The process prints the event stream of a session with this outcome, in the format of the CLI that was launched.
-
-    Tool calls are written in the launched assistant's own terms, so a session that uses tools suits one assistant only.
-    """
+class ScriptedAnswerSession:
+    """The process prints the event stream of a successful session that used no tools and answered with this, in the format
+    of whichever CLI was launched. Graders use no tools, so their sessions print correctly in either assistant."""
 
     final_text: str = ""
     structured_output: dict[str, object] | None = None
-    scripted_tool_calls: tuple[ScriptedToolCallItem, ...] = ()
+
+
+@dataclass(frozen=True)
+class ScriptedClaudeEventStreamSession:
+    """The process prints the Claude Code event stream of a session with this outcome."""
+
+    final_text: str = ""
+    structured_output: dict[str, object] | None = None
+    scripted_claude_tool_calls: tuple[ScriptedClaudeToolCall, ...] = ()
     is_error: bool = False
     exit_code: int = 0
     standard_error_text: str = ""
-    # Claude Code only: the result subtype the CLI reports; None reports the one that matches is_error.
+    # The result subtype the CLI reports; None reports the one that matches is_error.
     result_subtype: str | None = None
-    # The causes an error lists: Claude Code's result "errors" field, or the provider messages of Codex's failed turn.
+    # The causes an error lists: Claude Code's result "errors" field.
     error_messages: tuple[str, ...] = ()
-    # Claude Code only: the session duration its result event reports.
-    duration_milliseconds: int = 1234
+    # The session duration its result event reports; None leaves duration_ms out of the result event, as the CLI sometimes does.
+    duration_milliseconds: int | None = 1234
+
+
+@dataclass(frozen=True)
+class ScriptedCodexEventStreamSession:
+    """The process prints the Codex event stream of a session with this outcome."""
+
+    final_text: str = ""
+    structured_output: dict[str, object] | None = None
+    scripted_codex_tool_calls: tuple[ScriptedCodexToolCall, ...] = ()
+    is_error: bool = False
+    exit_code: int = 0
+    standard_error_text: str = ""
+    # The provider messages of Codex's failed turn.
+    error_messages: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -64,10 +84,23 @@ class ScriptedRawOutputSession:
 
 
 @dataclass(frozen=True)
+class ScriptedTimedOutSession:
+    """The process outlives the timeout it was launched with, so the process runner raises a ProcessTimedOutException."""
+
+
+@dataclass(frozen=True)
 class ScriptedFailedStartSession:
-    """Running the process raises this exception, for example a timeout or an executable that cannot start."""
+    """The process runner raises this exception, for example a ProcessStartFailedException for an executable that cannot
+    start, or a ProcessContainmentFailedException for a process that cannot be contained."""
 
     raised_exception: BaseException
 
 
-type ScriptedCliSession = ScriptedEventStreamSession | ScriptedRawOutputSession | ScriptedFailedStartSession
+type ScriptedCliSession = (
+    ScriptedAnswerSession
+    | ScriptedClaudeEventStreamSession
+    | ScriptedCodexEventStreamSession
+    | ScriptedRawOutputSession
+    | ScriptedTimedOutSession
+    | ScriptedFailedStartSession
+)

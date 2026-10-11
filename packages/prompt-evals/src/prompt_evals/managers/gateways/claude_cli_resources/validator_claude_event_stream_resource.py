@@ -3,7 +3,13 @@ from collections.abc import Iterable, Mapping, Sequence
 from decimal import Decimal
 from typing import Final, NoReturn, cast, final
 
-from prompt_evals.managers.exceptions.llm_session_exceptions import LlmSessionOutputMalformedException
+from prompt_evals.managers.exceptions.llm_session_exceptions import (
+    LlmSessionEventCountUnexpectedException,
+    LlmSessionEventFieldMissingException,
+    LlmSessionEventFieldTypeInvalidException,
+    LlmSessionEventLineNotJsonException,
+    LlmSessionEventLineNotJsonObjectException,
+)
 from prompt_evals.managers.gateways.claude_cli_resources.claude_event_stream_resources import (
     ClaudeEventStreamResource,
     ClaudeResultResource,
@@ -93,9 +99,7 @@ class ValidatorClaudeEventStreamResource:
     @staticmethod
     def _select_single_event(matching_events: Sequence[JsonObject], event_description: str, requested_model_name: str) -> JsonObject:
         if len(matching_events) != 1:
-            ValidatorClaudeEventStreamResource._raise_malformed(
-                requested_model_name, f"expected exactly one {event_description} event, found {len(matching_events)}"
-            )
+            raise LlmSessionEventCountUnexpectedException(CLAUDE_CODE_ASSISTANT_NAME, requested_model_name, event_description, len(matching_events))
         return matching_events[0]
 
     @staticmethod
@@ -103,11 +107,9 @@ class ValidatorClaudeEventStreamResource:
         try:
             parsed_event: object = json.loads(event_line)
         except json.JSONDecodeError as json_decode_error:
-            raise LlmSessionOutputMalformedException(
-                CLAUDE_CODE_ASSISTANT_NAME, requested_model_name, f"a line is not JSON: {event_line[:200]}"
-            ) from json_decode_error
+            raise LlmSessionEventLineNotJsonException(CLAUDE_CODE_ASSISTANT_NAME, requested_model_name, event_line) from json_decode_error
         if not isinstance(parsed_event, dict):
-            ValidatorClaudeEventStreamResource._raise_malformed(requested_model_name, f"a line is not a JSON object: {event_line[:200]}")
+            raise LlmSessionEventLineNotJsonObjectException(CLAUDE_CODE_ASSISTANT_NAME, requested_model_name, event_line)
         return cast(JsonObject, parsed_event)
 
     @staticmethod
@@ -116,11 +118,21 @@ class ValidatorClaudeEventStreamResource:
             ClaudeToolUseResource(
                 tool_use_id=ValidatorClaudeEventStreamResource._read_string(content_block, "id", requested_model_name),
                 tool_name=ValidatorClaudeEventStreamResource._read_string(content_block, "name", requested_model_name),
-                tool_input_json=json.dumps(content_block.get("input", {}), ensure_ascii=False),
+                tool_input_json=ValidatorClaudeEventStreamResource._read_tool_input_json(content_block, requested_model_name),
             )
             for content_block in ValidatorClaudeEventStreamResource._read_message_content_blocks(event, requested_model_name)
             if content_block.get(EVENT_TYPE_FIELD) == CONTENT_BLOCK_TOOL_USE
         ]
+
+    @staticmethod
+    def _read_tool_input_json(tool_use_content_block: Mapping[str, object], requested_model_name: str) -> str:
+        # A tool's arguments are always named fields; anything else means the stream cannot say what the call ran or touched.
+        tool_input: object = tool_use_content_block.get("input", {})
+        if not isinstance(tool_input, dict):
+            ValidatorClaudeEventStreamResource._raise_field_type_invalid(
+                requested_model_name, "the input of a tool_use content block", "a JSON object", tool_input
+            )
+        return json.dumps(tool_input, ensure_ascii=False)
 
     @staticmethod
     def _parse_tool_results(event: Mapping[str, object], requested_model_name: str) -> list[ClaudeToolResultResource]:
@@ -143,28 +155,33 @@ class ValidatorClaudeEventStreamResource:
             is_error=event.get("is_error") is True,
             result_text=result_text if isinstance(result_text, str) else "",
             structured_output_json=None if structured_output is None else json.dumps(structured_output, ensure_ascii=False),
-            duration_milliseconds=ValidatorClaudeEventStreamResource._read_whole_number(event, "duration_ms", requested_model_name),
-            total_cost_usd=Decimal(str(ValidatorClaudeEventStreamResource._read_number(event, "total_cost_usd", requested_model_name))),
+            duration_milliseconds=ValidatorClaudeEventStreamResource._read_optional_whole_number(event, "duration_ms", requested_model_name),
+            total_cost_usd=ValidatorClaudeEventStreamResource._read_optional_decimal(event, "total_cost_usd", requested_model_name),
             error_messages=ValidatorClaudeEventStreamResource._read_error_messages(event),
         )
 
+    # The CLI omits cost and duration from some results. An absent value stays None, never zero: a zero duration would
+    # count as a measured instant run in the timing summaries, and a zero cost as a free one.
     @staticmethod
-    def _read_number(json_object: Mapping[str, object], field_name: str, requested_model_name: str) -> float:
-        # An absent number reads as zero: the CLI omits cost and duration from some results.
-        field_value: object = json_object.get(field_name, 0)
+    def _read_optional_decimal(json_object: Mapping[str, object], field_name: str, requested_model_name: str) -> Decimal | None:
+        field_value: object = json_object.get(field_name)
+        if field_value is None:
+            return None
         # bool is a subclass of int, so a JSON true would otherwise pass as the number 1.
         if not isinstance(field_value, int | float) or isinstance(field_value, bool):
-            ValidatorClaudeEventStreamResource._raise_malformed(
-                requested_model_name, f"the result event's {field_name} is not a number: {field_value!r:.200}"
+            ValidatorClaudeEventStreamResource._raise_field_type_invalid(
+                requested_model_name, f"the result event's {field_name}", "a number", field_value
             )
-        return field_value
+        return Decimal(str(field_value))
 
     @staticmethod
-    def _read_whole_number(json_object: Mapping[str, object], field_name: str, requested_model_name: str) -> int:
-        field_value: object = json_object.get(field_name, 0)
+    def _read_optional_whole_number(json_object: Mapping[str, object], field_name: str, requested_model_name: str) -> int | None:
+        field_value: object = json_object.get(field_name)
+        if field_value is None:
+            return None
         if not isinstance(field_value, int) or isinstance(field_value, bool):
-            ValidatorClaudeEventStreamResource._raise_malformed(
-                requested_model_name, f"the result event's {field_name} is not a whole number: {field_value!r:.200}"
+            ValidatorClaudeEventStreamResource._raise_field_type_invalid(
+                requested_model_name, f"the result event's {field_name}", "a whole number", field_value
             )
         return field_value
 
@@ -183,12 +200,16 @@ class ValidatorClaudeEventStreamResource:
     def _read_message_content_blocks(event: Mapping[str, object], requested_model_name: str) -> list[JsonObject]:
         message: object = event.get("message")
         if not isinstance(message, dict):
-            ValidatorClaudeEventStreamResource._raise_malformed(requested_model_name, f"a {event.get(EVENT_TYPE_FIELD)} event has no message object")
+            ValidatorClaudeEventStreamResource._raise_field_type_invalid(
+                requested_model_name, f"the message of a {event.get(EVENT_TYPE_FIELD)} event", "a JSON object", message
+            )
         content: object = cast(JsonObject, message).get("content")
         if isinstance(content, str):
             return []
         if not isinstance(content, list):
-            ValidatorClaudeEventStreamResource._raise_malformed(requested_model_name, f"a {event.get(EVENT_TYPE_FIELD)} message has no content list")
+            ValidatorClaudeEventStreamResource._raise_field_type_invalid(
+                requested_model_name, f"the content of a {event.get(EVENT_TYPE_FIELD)} message", "a list or a string", content
+            )
         return [cast(JsonObject, content_block) for content_block in cast(list[object], content) if isinstance(content_block, dict)]
 
     @staticmethod
@@ -210,13 +231,13 @@ class ValidatorClaudeEventStreamResource:
     def _read_string(json_object: Mapping[str, object], field_name: str, requested_model_name: str) -> str:
         field_value: object = json_object.get(field_name)
         if field_value is None:
-            ValidatorClaudeEventStreamResource._raise_malformed(requested_model_name, f"the field '{field_name}' is missing")
+            raise LlmSessionEventFieldMissingException(CLAUDE_CODE_ASSISTANT_NAME, requested_model_name, field_name)
         if not isinstance(field_value, str):
-            ValidatorClaudeEventStreamResource._raise_malformed(
-                requested_model_name, f"the field '{field_name}' is a {type(field_value).__name__}, not a string: {field_value!r:.200}"
-            )
+            ValidatorClaudeEventStreamResource._raise_field_type_invalid(requested_model_name, f"the field '{field_name}'", "a string", field_value)
         return field_value
 
     @staticmethod
-    def _raise_malformed(requested_model_name: str, malformation_description: str) -> NoReturn:
-        raise LlmSessionOutputMalformedException(CLAUDE_CODE_ASSISTANT_NAME, requested_model_name, malformation_description)
+    def _raise_field_type_invalid(requested_model_name: str, field_description: str, expected_type_description: str, field_value: object) -> NoReturn:
+        raise LlmSessionEventFieldTypeInvalidException(
+            CLAUDE_CODE_ASSISTANT_NAME, requested_model_name, field_description, expected_type_description, field_value
+        )

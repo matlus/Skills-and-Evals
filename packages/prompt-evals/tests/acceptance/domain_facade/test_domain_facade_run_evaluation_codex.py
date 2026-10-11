@@ -1,3 +1,4 @@
+import errno
 import json
 import re
 from pathlib import Path
@@ -21,13 +22,21 @@ from acceptance_support.sample_eval_suite_builder import (
     SampleEvalSuiteBuilder,
 )
 from acceptance_support.scripted_cli_sessions import (
+    ScriptedClaudeEventStreamSession,
+    ScriptedClaudeToolCall,
     ScriptedCodexCommandExecution,
+    ScriptedCodexEventStreamSession,
     ScriptedCodexFileChange,
-    ScriptedEventStreamSession,
     ScriptedFailedStartSession,
     ScriptedRawOutputSession,
+    ScriptedTimedOutSession,
 )
-from acceptance_support.scripted_grader_sessions import FACT_EXTRACTION_PROMPT_HEADING, script_correct_grading
+from acceptance_support.scripted_grader_sessions import (
+    FACT_EXTRACTION_PROMPT_HEADING,
+    JUDGMENT_PROMPT_HEADING,
+    create_judge_verdict_schema_document,
+    script_correct_grading,
+)
 from acceptance_support.service_locator_testing import create_domain_facade
 from acceptance_support.test_mediator_coding_assistant_cli import (
     CLAUDE_EXECUTABLE_PATH,
@@ -38,12 +47,19 @@ from acceptance_support.test_mediator_coding_assistant_cli import (
 
 from prompt_evals import (
     CodingAssistant,
-    ConfigurationSettingException,
+    ConfigurationSettingBlankException,
     DomainFacade,
     EffortLevel,
     EvaluationRequest,
+    LlmCliProcessContainmentFailedException,
+    LlmCliProcessResumeFailedException,
     LlmCliStartFailedException,
     Scorecard,
+)
+from prompt_evals.managers.exceptions.process_runner_exceptions import (
+    ProcessContainmentFailedException,
+    ProcessResumeFailedException,
+    ProcessStartFailedException,
 )
 
 BASELINE_PROMPT_MARKER: Final[str] = "Baseline prompt."
@@ -66,14 +82,28 @@ def create_python_command() -> str:
 
 
 def create_codex_trial_session(
-    answer_text: str, scripted_command_execution: ScriptedCodexCommandExecution | None = None
-) -> ScriptedEventStreamSession:
+    answer_text: str, scripted_codex_command_execution: ScriptedCodexCommandExecution | None = None
+) -> ScriptedCodexEventStreamSession:
     # The scripted process is the Codex CLI, so the shell tool appears as a Codex command execution;
     # without one given, the trial runs one python command successfully.
-    trial_command_execution: ScriptedCodexCommandExecution = (
-        ScriptedCodexCommandExecution(command=create_python_command()) if scripted_command_execution is None else scripted_command_execution
+    trial_scripted_codex_command_execution: ScriptedCodexCommandExecution = (
+        ScriptedCodexCommandExecution(command=create_python_command())
+        if scripted_codex_command_execution is None
+        else scripted_codex_command_execution
     )
-    return ScriptedEventStreamSession(final_text=answer_text, scripted_tool_calls=(trial_command_execution,))
+    return ScriptedCodexEventStreamSession(final_text=answer_text, scripted_codex_tool_calls=(trial_scripted_codex_command_execution,))
+
+
+def create_claude_code_trial_session(answer_text: str) -> ScriptedClaudeEventStreamSession:
+    # The scripted process is the Claude Code CLI, so the shell tool appears under Claude's name for it, "Bash".
+    return ScriptedClaudeEventStreamSession(
+        final_text=answer_text,
+        scripted_claude_tool_calls=(
+            ScriptedClaudeToolCall(
+                tool_name="Bash", tool_input={"command": create_python_command()}, tool_result_text=RandomDataGenerator.create_random_word()
+            ),
+        ),
+    )
 
 
 def create_random_grader_model_name() -> str:
@@ -235,52 +265,69 @@ class TestRunEvaluationInCodexExpectedPaths:
                 create_expected_rows_for_every_check(CANDIDATE_VARIANT_NAME, trial_count=1, passed_count=1),
             ),
         )
+        expected_grader_sandbox_mode: str = "read-only"
         # One fact extraction per trial; it answers through the eval suite's fact-extraction schema.
-        expected_extraction_invocation: ExpectedCodexInvocation = ExpectedCodexInvocation(
+        expected_extraction_codex_invocation: ExpectedCodexInvocation = ExpectedCodexInvocation(
             invocation_count=2,
             model_name=grader_model_name,
             effort_level=GRADER_EFFORT,
-            sandbox_mode="read-only",
+            sandbox_mode=expected_grader_sandbox_mode,
             approves_commands=False,
             sandbox_file_names=(),
             output_schema_document=json.loads((sample_eval_suite.eval_suite_directory / FACT_EXTRACTION_SCHEMA_FILE).read_text(encoding="utf-8")),
+        )
+        # One judgment per trial; it answers through the judge verdict schema.
+        expected_judgment_codex_invocation: ExpectedCodexInvocation = ExpectedCodexInvocation(
+            invocation_count=2,
+            model_name=grader_model_name,
+            effort_level=GRADER_EFFORT,
+            sandbox_mode=expected_grader_sandbox_mode,
+            approves_commands=False,
+            sandbox_file_names=(),
+            output_schema_document=create_judge_verdict_schema_document(),
         )
 
         # Act
         actual_scorecard: Scorecard = await domain_facade.run_evaluation(evaluation_request, ArtifactRecorder().record_evaluation_artifact)
 
         # Assert
-        actual_extraction_invocations: tuple[CapturedCliInvocation, ...] = tuple(
+        actual_extraction_captured_cli_invocations: tuple[CapturedCliInvocation, ...] = tuple(
             captured_codex_invocation
             for captured_codex_invocation in test_mediator_coding_assistant_cli.captured_codex_invocations
             if captured_codex_invocation.prompt_text.startswith(FACT_EXTRACTION_PROMPT_HEADING)
         )
+        actual_judgment_captured_cli_invocations: tuple[CapturedCliInvocation, ...] = tuple(
+            captured_codex_invocation
+            for captured_codex_invocation in test_mediator_coding_assistant_cli.captured_codex_invocations
+            if captured_codex_invocation.prompt_text.startswith(JUDGMENT_PROMPT_HEADING)
+        )
         ScorecardAsserter.assert_expected_and_actual_are_equal(expected_scorecard, actual_scorecard.passes_gate, actual_scorecard.scorecard_rows)
-        CodexInvocationAsserter.assert_expected_and_actual_are_equal(expected_extraction_invocation, actual_extraction_invocations)
+        CodexInvocationAsserter.assert_expected_and_actual_are_equal(expected_extraction_codex_invocation, actual_extraction_captured_cli_invocations)
+        CodexInvocationAsserter.assert_expected_and_actual_are_equal(expected_judgment_codex_invocation, actual_judgment_captured_cli_invocations)
 
 
 @pytest.mark.acceptance
 class TestRunEvaluationInCodexGradingOutcomes:
     @pytest.mark.parametrize(
-        ("exit_code", "status"),
+        ("exit_code", "command_execution_status"),
         [(1, "failed"), (2, "completed"), (None, "in_progress")],
         ids=["failed", "completed-with-non-zero-exit", "never-completed"],
     )
     async def test_RunEvaluation_WhenTheOnlyPythonCommandDidNotSucceed_ThenTheCodeExecutedCheckFails(
-        self, tmp_path: Path, exit_code: int | None, status: str
+        self, tmp_path: Path, exit_code: int | None, command_execution_status: str
     ) -> None:
         # Arrange
         sample_eval_suite: SampleEvalSuite = SampleEvalSuiteBuilder.write_sample_eval_suite(tmp_path)
         candidate_answer_text: str = f"Candidate answer {RandomDataGenerator.create_random_sentence()}"
-        unsuccessful_command_execution: ScriptedCodexCommandExecution = ScriptedCodexCommandExecution(
+        unsuccessful_scripted_codex_command_execution: ScriptedCodexCommandExecution = ScriptedCodexCommandExecution(
             command=create_python_command(),
             aggregated_output=RandomDataGenerator.create_random_sentence(),
             exit_code=exit_code,
-            status=status,
+            execution_status=command_execution_status,
         )
         test_mediator_coding_assistant_cli: TestMediatorCodingAssistantCli = TestMediatorCodingAssistantCli()
         test_mediator_coding_assistant_cli.script_sessions(
-            (CANDIDATE_PROMPT_MARKER,), create_codex_trial_session(candidate_answer_text, unsuccessful_command_execution)
+            (CANDIDATE_PROMPT_MARKER,), create_codex_trial_session(candidate_answer_text, unsuccessful_scripted_codex_command_execution)
         )
         script_correct_grading(test_mediator_coding_assistant_cli, sample_eval_suite)
         evaluation_request: EvaluationRequest = create_codex_evaluation_request(
@@ -289,10 +336,10 @@ class TestRunEvaluationInCodexGradingOutcomes:
         domain_facade: DomainFacade = create_domain_facade(
             test_mediator_coding_assistant_cli, create_override_by_environment_variable_name(create_random_grader_model_name())
         )
-        expected_candidate_rows: list[ExpectedScorecardRow] = create_expected_rows_for_every_check(
+        expected_candidate_scorecard_rows: list[ExpectedScorecardRow] = create_expected_rows_for_every_check(
             CANDIDATE_VARIANT_NAME, trial_count=1, passed_count=1
         )
-        expected_candidate_rows[2] = ExpectedScorecardRow(
+        expected_candidate_scorecard_rows[2] = ExpectedScorecardRow(
             check_name=CODE_EXECUTED_CHECK_NAME,
             variant_name=CANDIDATE_VARIANT_NAME,
             trial_count=1,
@@ -301,7 +348,7 @@ class TestRunEvaluationInCodexGradingOutcomes:
             meets_minimum_pass_rate=False,
             failure_reason_phrases=("0 successful of 1 shell calls",),
         )
-        expected_scorecard: ExpectedScorecard = ExpectedScorecard(passes_gate=False, expected_scorecard_rows=tuple(expected_candidate_rows))
+        expected_scorecard: ExpectedScorecard = ExpectedScorecard(passes_gate=False, expected_scorecard_rows=tuple(expected_candidate_scorecard_rows))
 
         # Act
         actual_scorecard: Scorecard = await domain_facade.run_evaluation(evaluation_request, ArtifactRecorder().record_evaluation_artifact)
@@ -336,9 +383,9 @@ class TestRunEvaluationInCodexGradingOutcomes:
         test_mediator_coding_assistant_cli: TestMediatorCodingAssistantCli = TestMediatorCodingAssistantCli()
         test_mediator_coding_assistant_cli.script_sessions(
             (CANDIDATE_PROMPT_MARKER,),
-            ScriptedEventStreamSession(
+            ScriptedCodexEventStreamSession(
                 final_text=f"Candidate answer {RandomDataGenerator.create_random_sentence()}",
-                scripted_tool_calls=(ScriptedCodexFileChange(file_path=changed_file_name, change_kind=change_kind),),
+                scripted_codex_tool_calls=(ScriptedCodexFileChange(file_path=changed_file_name, change_kind=change_kind),),
             ),
         )
         script_correct_grading(test_mediator_coding_assistant_cli, sample_eval_suite)
@@ -378,7 +425,7 @@ class TestRunEvaluationInCodexFailurePaths:
         test_mediator_coding_assistant_cli: TestMediatorCodingAssistantCli = TestMediatorCodingAssistantCli()
         # Codex prints the failed turn on stdout and exits with 1.
         test_mediator_coding_assistant_cli.script_sessions(
-            (CANDIDATE_PROMPT_MARKER,), ScriptedEventStreamSession(is_error=True, error_messages=(provider_message,), exit_code=1)
+            (CANDIDATE_PROMPT_MARKER,), ScriptedCodexEventStreamSession(is_error=True, error_messages=(provider_message,), exit_code=1)
         )
         script_correct_grading(test_mediator_coding_assistant_cli, sample_eval_suite)
         evaluation_request: EvaluationRequest = create_codex_evaluation_request(
@@ -456,7 +503,7 @@ class TestRunEvaluationInCodexFailurePaths:
         # Arrange
         sample_eval_suite: SampleEvalSuite = SampleEvalSuiteBuilder.write_sample_eval_suite(tmp_path)
         test_mediator_coding_assistant_cli: TestMediatorCodingAssistantCli = TestMediatorCodingAssistantCli()
-        test_mediator_coding_assistant_cli.script_sessions((CANDIDATE_PROMPT_MARKER,), ScriptedFailedStartSession(raised_exception=TimeoutError()))
+        test_mediator_coding_assistant_cli.script_sessions((CANDIDATE_PROMPT_MARKER,), ScriptedTimedOutSession())
         script_correct_grading(test_mediator_coding_assistant_cli, sample_eval_suite)
         evaluation_request: EvaluationRequest = create_codex_evaluation_request(
             sample_eval_suite, repetitions=1, variant_names=(CANDIDATE_VARIANT_NAME,)
@@ -477,14 +524,21 @@ class TestRunEvaluationInCodexFailurePaths:
         # Assert
         ScorecardAsserter.assert_expected_and_actual_are_equal(expected_scorecard, actual_scorecard.passes_gate, actual_scorecard.scorecard_rows)
 
-    @pytest.mark.parametrize("start_error", [FileNotFoundError(), PermissionError()], ids=["missing", "not-executable"])
+    @pytest.mark.parametrize(
+        "start_error",
+        [FileNotFoundError(errno.ENOENT, "No such file or directory"), PermissionError(errno.EACCES, "Permission denied")],
+        ids=["missing", "not-executable"],
+    )
     async def test_RunEvaluation_WhenTheCodexCliCannotBeStarted_ThenLlmCliStartFailedExceptionNamesTheSettingAndStopsTheEvaluation(
         self, tmp_path: Path, start_error: OSError
     ) -> None:
         # Arrange
         sample_eval_suite: SampleEvalSuite = SampleEvalSuiteBuilder.write_sample_eval_suite(tmp_path)
         test_mediator_coding_assistant_cli: TestMediatorCodingAssistantCli = TestMediatorCodingAssistantCli()
-        test_mediator_coding_assistant_cli.script_sessions((CANDIDATE_PROMPT_MARKER,), ScriptedFailedStartSession(raised_exception=start_error))
+        test_mediator_coding_assistant_cli.script_sessions(
+            (CANDIDATE_PROMPT_MARKER,),
+            ScriptedFailedStartSession(raised_exception=ProcessStartFailedException(CODEX_EXECUTABLE_PATH, start_error)),
+        )
         evaluation_request: EvaluationRequest = create_codex_evaluation_request(
             sample_eval_suite, repetitions=1, variant_names=(CANDIDATE_VARIANT_NAME,)
         )
@@ -508,19 +562,104 @@ class TestRunEvaluationInCodexFailurePaths:
             expected_exception_type=LlmCliStartFailedException,
             expected_message_phrases=expected_message_phrases,
             expected_contextual_entries_by_name=expected_contextual_entries_by_name,
-            actual_exception=exception_info.value,
+            actual_prompt_evals_base_exception=exception_info.value,
+        )
+
+    async def test_RunEvaluation_WhenTheStartedCodexProcessCannotBeContained_ThenLlmCliProcessContainmentFailedExceptionStopsTheEvaluation(
+        self, tmp_path: Path
+    ) -> None:
+        # Arrange
+        sample_eval_suite: SampleEvalSuite = SampleEvalSuiteBuilder.write_sample_eval_suite(tmp_path)
+        containment_error: PermissionError = PermissionError(RandomDataGenerator.create_random_sentence())
+        test_mediator_coding_assistant_cli: TestMediatorCodingAssistantCli = TestMediatorCodingAssistantCli()
+        test_mediator_coding_assistant_cli.script_sessions(
+            (CANDIDATE_PROMPT_MARKER,),
+            ScriptedFailedStartSession(
+                raised_exception=ProcessContainmentFailedException(RandomDataGenerator.create_random_process_id(), containment_error)
+            ),
+        )
+        evaluation_request: EvaluationRequest = create_codex_evaluation_request(
+            sample_eval_suite, repetitions=1, variant_names=(CANDIDATE_VARIANT_NAME,)
+        )
+        domain_facade: DomainFacade = create_domain_facade(
+            test_mediator_coding_assistant_cli, create_override_by_environment_variable_name(create_random_grader_model_name())
+        )
+        expected_message_phrases: tuple[str, ...] = (CODEX_ASSISTANT_NAME, evaluation_request.model_name, "could not be contained")
+        # The process did start, so the exception must not send the user to reinstall Codex or change its executable setting.
+        unexpected_message_phrases: tuple[str, ...] = ("could not be started", "Install Codex", CODEX_EXECUTABLE_VARIABLE)
+        expected_contextual_entries_by_name: dict[str, object] = {
+            "AssistantName": CODEX_ASSISTANT_NAME,
+            "ModelName": evaluation_request.model_name,
+            "ContainmentFailure": f"{type(containment_error).__name__}: {containment_error}",
+            "ExceptionType": LlmCliProcessContainmentFailedException.__name__,
+        }
+
+        # Act
+        with pytest.raises(LlmCliProcessContainmentFailedException) as exception_info:
+            await domain_facade.run_evaluation(evaluation_request, ArtifactRecorder().record_evaluation_artifact)
+
+        # Assert
+        ExceptionAsserter.assert_expected_and_actual_are_equal(
+            expected_exception_type=LlmCliProcessContainmentFailedException,
+            expected_message_phrases=expected_message_phrases,
+            expected_contextual_entries_by_name=expected_contextual_entries_by_name,
+            actual_prompt_evals_base_exception=exception_info.value,
+            unexpected_message_phrases=unexpected_message_phrases,
+        )
+
+    async def test_RunEvaluation_WhenTheStartedCodexProcessCannotBeResumed_ThenLlmCliProcessResumeFailedExceptionStopsTheEvaluation(
+        self, tmp_path: Path
+    ) -> None:
+        # Arrange
+        sample_eval_suite: SampleEvalSuite = SampleEvalSuiteBuilder.write_sample_eval_suite(tmp_path)
+        resume_error: PermissionError = PermissionError(RandomDataGenerator.create_random_sentence())
+        test_mediator_coding_assistant_cli: TestMediatorCodingAssistantCli = TestMediatorCodingAssistantCli()
+        test_mediator_coding_assistant_cli.script_sessions(
+            (CANDIDATE_PROMPT_MARKER,),
+            ScriptedFailedStartSession(raised_exception=ProcessResumeFailedException(RandomDataGenerator.create_random_process_id(), resume_error)),
+        )
+        evaluation_request: EvaluationRequest = create_codex_evaluation_request(
+            sample_eval_suite, repetitions=1, variant_names=(CANDIDATE_VARIANT_NAME,)
+        )
+        domain_facade: DomainFacade = create_domain_facade(
+            test_mediator_coding_assistant_cli, create_override_by_environment_variable_name(create_random_grader_model_name())
+        )
+        expected_message_phrases: tuple[str, ...] = (CODEX_ASSISTANT_NAME, evaluation_request.model_name, "could not be resumed")
+        # The process was created, so the exception must not send the user to reinstall Codex or change its executable setting.
+        unexpected_message_phrases: tuple[str, ...] = ("could not be started", "Install Codex", CODEX_EXECUTABLE_VARIABLE)
+        expected_contextual_entries_by_name: dict[str, object] = {
+            "AssistantName": CODEX_ASSISTANT_NAME,
+            "ModelName": evaluation_request.model_name,
+            "ResumeFailure": f"{type(resume_error).__name__}: {resume_error}",
+            "ExceptionType": LlmCliProcessResumeFailedException.__name__,
+        }
+
+        # Act
+        with pytest.raises(LlmCliProcessResumeFailedException) as exception_info:
+            await domain_facade.run_evaluation(evaluation_request, ArtifactRecorder().record_evaluation_artifact)
+
+        # Assert
+        ExceptionAsserter.assert_expected_and_actual_are_equal(
+            expected_exception_type=LlmCliProcessResumeFailedException,
+            expected_message_phrases=expected_message_phrases,
+            expected_contextual_entries_by_name=expected_contextual_entries_by_name,
+            actual_prompt_evals_base_exception=exception_info.value,
+            unexpected_message_phrases=unexpected_message_phrases,
         )
 
 
 @pytest.mark.acceptance
 class TestRunEvaluationInCodexInvalidConfiguration:
-    async def test_RunEvaluation_WhenTheCodexExecutableSettingIsBlank_ThenConfigurationSettingExceptionNamesTheSetting(self, tmp_path: Path) -> None:
+    async def test_RunEvaluation_WhenTheCodexExecutableSettingIsBlank_ThenConfigurationSettingBlankExceptionNamesTheSetting(
+        self, tmp_path: Path
+    ) -> None:
         # Arrange
         sample_eval_suite: SampleEvalSuite = SampleEvalSuiteBuilder.write_sample_eval_suite(tmp_path)
         blank_setting_value: str = "  "
         override_by_environment_variable_name: dict[str, str] = create_override_by_environment_variable_name(create_random_grader_model_name())
         override_by_environment_variable_name[CODEX_EXECUTABLE_VARIABLE] = blank_setting_value
-        # Only an evaluation that runs Codex reads the Codex settings, so a Claude Code user is not stopped by them.
+        # Only an evaluation that runs Codex reads the Codex settings, so a Claude Code user is not stopped by them; the
+        # test after this one proves that half.
         domain_facade: DomainFacade = create_domain_facade(TestMediatorCodingAssistantCli(), override_by_environment_variable_name)
         evaluation_request: EvaluationRequest = create_codex_evaluation_request(sample_eval_suite, repetitions=1)
         expected_message_phrases: tuple[str, ...] = (CODEX_EXECUTABLE_VARIABLE, "expected a non-blank value")
@@ -530,13 +669,45 @@ class TestRunEvaluationInCodexInvalidConfiguration:
         }
 
         # Act
-        with pytest.raises(ConfigurationSettingException) as exception_info:
+        with pytest.raises(ConfigurationSettingBlankException) as exception_info:
             await domain_facade.run_evaluation(evaluation_request, ArtifactRecorder().record_evaluation_artifact)
 
         # Assert
         ExceptionAsserter.assert_expected_and_actual_are_equal(
-            expected_exception_type=ConfigurationSettingException,
+            expected_exception_type=ConfigurationSettingBlankException,
             expected_message_phrases=expected_message_phrases,
             expected_contextual_entries_by_name=expected_contextual_entries_by_name,
-            actual_exception=exception_info.value,
+            actual_prompt_evals_base_exception=exception_info.value,
         )
+
+    async def test_RunEvaluation_WhenTheCodexExecutableSettingIsBlankButNothingRunsInCodex_ThenTheClaudeCodeEvaluationCompletes(
+        self, tmp_path: Path
+    ) -> None:
+        # Arrange
+        sample_eval_suite: SampleEvalSuite = SampleEvalSuiteBuilder.write_sample_eval_suite(tmp_path)
+        test_mediator_coding_assistant_cli: TestMediatorCodingAssistantCli = TestMediatorCodingAssistantCli()
+        candidate_answer_text: str = f"Candidate answer {RandomDataGenerator.create_random_sentence()}"
+        test_mediator_coding_assistant_cli.script_sessions((CANDIDATE_PROMPT_MARKER,), create_claude_code_trial_session(candidate_answer_text))
+        script_correct_grading(test_mediator_coding_assistant_cli, sample_eval_suite)
+        override_by_environment_variable_name: dict[str, str] = create_override_by_environment_variable_name(create_random_grader_model_name())
+        override_by_environment_variable_name[CODEX_EXECUTABLE_VARIABLE] = "  "
+        domain_facade: DomainFacade = create_domain_facade(test_mediator_coding_assistant_cli, override_by_environment_variable_name)
+        # The trials and, by default, the graders run in Claude Code.
+        evaluation_request: EvaluationRequest = EvaluationRequest(
+            coding_assistant=CodingAssistant.CLAUDE_CODE,
+            eval_suite_directory=sample_eval_suite.eval_suite_directory,
+            model_name=f"model-{RandomDataGenerator.create_random_word()}",
+            effort_level=EffortLevel.MEDIUM,
+            repetitions=1,
+            variant_names=(CANDIDATE_VARIANT_NAME,),
+        )
+        expected_scorecard: ExpectedScorecard = ExpectedScorecard(
+            passes_gate=True,
+            expected_scorecard_rows=tuple(create_expected_rows_for_every_check(CANDIDATE_VARIANT_NAME, trial_count=1, passed_count=1)),
+        )
+
+        # Act
+        actual_scorecard: Scorecard = await domain_facade.run_evaluation(evaluation_request, ArtifactRecorder().record_evaluation_artifact)
+
+        # Assert
+        ScorecardAsserter.assert_expected_and_actual_are_equal(expected_scorecard, actual_scorecard.passes_gate, actual_scorecard.scorecard_rows)

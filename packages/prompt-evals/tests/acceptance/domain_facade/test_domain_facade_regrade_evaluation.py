@@ -17,7 +17,12 @@ from acceptance_support.sample_eval_suite_builder import (
     SampleEvalSuite,
     SampleEvalSuiteBuilder,
 )
-from acceptance_support.scripted_cli_sessions import ScriptedClaudeToolCall, ScriptedCodexCommandExecution, ScriptedEventStreamSession
+from acceptance_support.scripted_cli_sessions import (
+    ScriptedClaudeEventStreamSession,
+    ScriptedClaudeToolCall,
+    ScriptedCodexCommandExecution,
+    ScriptedCodexEventStreamSession,
+)
 from acceptance_support.scripted_grader_sessions import (
     FACT_EXTRACTION_PROMPT_HEADING,
     JUDGMENT_PROMPT_HEADING,
@@ -33,11 +38,12 @@ from prompt_evals import (
     EffortLevel,
     EvaluationArtifact,
     EvaluationArtifactType,
-    EvaluationRequestValidationException,
     RecordedCompletedTrial,
     RecordedErroredTrial,
     RecordedTrial,
     RegradeRequest,
+    RegradeRequestTrialsNotInEvalSuiteException,
+    RegradeRequestValidationException,
     Scorecard,
     TrialIdentity,
 )
@@ -58,9 +64,9 @@ def record_claude_trial(trial_identity: TrialIdentity, answer_text: str) -> Reco
         trial_identity=trial_identity,
         event_stream_text=ClaudeEventStreamBuilder.build_event_stream(
             f"model-{RandomDataGenerator.create_random_word()}",
-            ScriptedEventStreamSession(
+            ScriptedClaudeEventStreamSession(
                 final_text=answer_text,
-                scripted_tool_calls=(
+                scripted_claude_tool_calls=(
                     ScriptedClaudeToolCall(
                         tool_name="Bash", tool_input={"command": "python totals.py"}, tool_result_text=RandomDataGenerator.create_random_word()
                     ),
@@ -155,14 +161,14 @@ class TestRegradeEvaluationExpectedPaths:
         )
 
         # Assert
-        answer_artifacts: list[EvaluationArtifact] = [
+        answer_evaluation_artifacts: list[EvaluationArtifact] = [
             evaluation_artifact
             for evaluation_artifact in artifact_recorder.evaluation_artifacts
             if evaluation_artifact.artifact_type == EvaluationArtifactType.TRIAL_ANSWER and evaluation_artifact.trial_identity == trial_identity
         ]
         actual_outcome: tuple[object, ...] = (
             actual_scorecard.passes_gate,
-            answer_artifacts[0].content.decode("utf-8") if answer_artifacts else None,
+            answer_evaluation_artifacts[0].content.decode("utf-8") if answer_evaluation_artifacts else None,
         )
         assert actual_outcome == expected_outcome, f"expected (gate, emitted answer) {expected_outcome}; actual {actual_outcome}"
 
@@ -174,9 +180,9 @@ class TestRegradeEvaluationExpectedPaths:
                 answer_duration_seconds=None,
                 trial_identity=create_trial_identity(CANDIDATE_VARIANT_NAME, repetition_number),
                 event_stream_text=CodexEventStreamBuilder.build_event_stream(
-                    ScriptedEventStreamSession(
+                    ScriptedCodexEventStreamSession(
                         final_text=create_answer_text(),
-                        scripted_tool_calls=(
+                        scripted_codex_tool_calls=(
                             ScriptedCodexCommandExecution(command="python totals.py", aggregated_output=RandomDataGenerator.create_random_sentence()),
                         ),
                     )
@@ -266,37 +272,37 @@ class TestRegradeEvaluationInvalidInput:
         expected_contextual_entries_by_name: dict[str, object] = {VALIDATION_PROBLEM_COUNT_ENTRY_NAME: len(expected_message_phrases)}
 
         # Act
-        with pytest.raises(EvaluationRequestValidationException) as exception_info:
+        with pytest.raises(RegradeRequestValidationException) as exception_info:
             await create_domain_facade_for(TestMediatorCodingAssistantCli()).regrade_evaluation(
                 regrade_request, ArtifactRecorder().record_evaluation_artifact
             )
 
         # Assert
         ExceptionAsserter.assert_expected_and_actual_are_equal(
-            expected_exception_type=EvaluationRequestValidationException,
+            expected_exception_type=RegradeRequestValidationException,
             expected_message_phrases=expected_message_phrases,
             expected_contextual_entries_by_name=expected_contextual_entries_by_name,
-            actual_exception=exception_info.value,
+            actual_prompt_evals_base_exception=exception_info.value,
         )
 
-    async def test_RegradeEvaluation_WhenNoTrialIsRecorded_ThenEvaluationRequestValidationExceptionSaysSo(self, tmp_path: Path) -> None:
+    async def test_RegradeEvaluation_WhenNoTrialIsRecorded_ThenRegradeRequestValidationExceptionSaysSo(self, tmp_path: Path) -> None:
         # Arrange
         sample_eval_suite: SampleEvalSuite = SampleEvalSuiteBuilder.write_sample_eval_suite(tmp_path)
         expected_message_phrases: tuple[str, ...] = ("there are no recorded trials to grade",)
         expected_contextual_entries_by_name: dict[str, object] = {VALIDATION_PROBLEM_COUNT_ENTRY_NAME: len(expected_message_phrases)}
 
         # Act
-        with pytest.raises(EvaluationRequestValidationException) as exception_info:
+        with pytest.raises(RegradeRequestValidationException) as exception_info:
             await create_domain_facade_for(TestMediatorCodingAssistantCli()).regrade_evaluation(
                 create_regrade_request(sample_eval_suite, ()), ArtifactRecorder().record_evaluation_artifact
             )
 
         # Assert
         ExceptionAsserter.assert_expected_and_actual_are_equal(
-            expected_exception_type=EvaluationRequestValidationException,
+            expected_exception_type=RegradeRequestValidationException,
             expected_message_phrases=expected_message_phrases,
             expected_contextual_entries_by_name=expected_contextual_entries_by_name,
-            actual_exception=exception_info.value,
+            actual_prompt_evals_base_exception=exception_info.value,
         )
 
     async def test_RegradeEvaluation_WhenRecordedTrialsNameAVariantAndCaseTheSuiteLacks_ThenEveryUndefinedNameIsReported(
@@ -312,22 +318,26 @@ class TestRegradeEvaluationInvalidInput:
                 TrialIdentity(variant_name=CANDIDATE_VARIANT_NAME, case_name=undefined_case_name, repetition_number=1), create_answer_text()
             ),
         )
+        # Each problem lists the names the suite does define, so the reader can see what the recorded trial should have used.
         expected_message_phrases: tuple[str, ...] = (
-            f"the recorded variant '{undefined_variant_name}' is not defined by suite '{sample_eval_suite.eval_suite_name}'",
-            f"the recorded case '{undefined_case_name}' is not defined",
+            (
+                f"the recorded variant '{undefined_variant_name}' is not defined by suite '{sample_eval_suite.eval_suite_name}' "
+                f"(defined variants: {BASELINE_VARIANT_NAME}, {CANDIDATE_VARIANT_NAME})"
+            ),
+            f"the recorded case '{undefined_case_name}' is not defined by suite '{sample_eval_suite.eval_suite_name}' (defined cases: {CASE_NAME})",
         )
         expected_contextual_entries_by_name: dict[str, object] = {VALIDATION_PROBLEM_COUNT_ENTRY_NAME: len(expected_message_phrases)}
 
         # Act
-        with pytest.raises(EvaluationRequestValidationException) as exception_info:
+        with pytest.raises(RegradeRequestTrialsNotInEvalSuiteException) as exception_info:
             await create_domain_facade_for(TestMediatorCodingAssistantCli()).regrade_evaluation(
                 create_regrade_request(sample_eval_suite, recorded_trials), ArtifactRecorder().record_evaluation_artifact
             )
 
         # Assert
         ExceptionAsserter.assert_expected_and_actual_are_equal(
-            expected_exception_type=EvaluationRequestValidationException,
+            expected_exception_type=RegradeRequestTrialsNotInEvalSuiteException,
             expected_message_phrases=expected_message_phrases,
             expected_contextual_entries_by_name=expected_contextual_entries_by_name,
-            actual_exception=exception_info.value,
+            actual_prompt_evals_base_exception=exception_info.value,
         )

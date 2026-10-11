@@ -1,3 +1,5 @@
+import errno
+import json
 from pathlib import Path
 from typing import Final
 
@@ -29,10 +31,12 @@ from acceptance_support.sample_eval_suite_builder import (
     SampleEvalSuiteBuilder,
 )
 from acceptance_support.scripted_cli_sessions import (
+    ScriptedAnswerSession,
+    ScriptedClaudeEventStreamSession,
     ScriptedClaudeToolCall,
-    ScriptedEventStreamSession,
     ScriptedFailedStartSession,
     ScriptedRawOutputSession,
+    ScriptedTimedOutSession,
 )
 from acceptance_support.scripted_grader_sessions import (
     FACT_EXTRACTION_PROMPT_HEADING,
@@ -42,21 +46,37 @@ from acceptance_support.scripted_grader_sessions import (
     script_correct_grading,
 )
 from acceptance_support.service_locator_testing import ServiceLocatorTesting, create_domain_facade
-from acceptance_support.test_mediator_coding_assistant_cli import CapturedCliInvocation, TestMediatorCodingAssistantCli
+from acceptance_support.test_mediator_coding_assistant_cli import CLAUDE_EXECUTABLE_PATH, CapturedCliInvocation, TestMediatorCodingAssistantCli
 
 from prompt_evals import (
     ArtifactCallbackException,
     CodingAssistant,
-    ConfigurationSettingException,
+    ConfigurationSettingBaseException,
+    ConfigurationSettingBlankException,
+    ConfigurationSettingNotNumberException,
+    ConfigurationSettingNotWholeNumberException,
+    ConfigurationSettingNumberOutOfRangeException,
+    ConfigurationSettingUnknownCodingAssistantException,
+    ConfigurationSettingUnknownEffortLevelException,
+    ConfigurationSettingWholeNumberOutOfRangeException,
     DomainFacade,
     DurationSummary,
     EffortLevel,
-    EvalSuiteDefinitionInvalidException,
+    EvalSuiteCaseInputsEmptyException,
+    EvalSuiteFileNotJsonException,
+    EvalSuiteFileNotJsonObjectException,
+    EvalSuiteFileNotUtf8Exception,
+    EvalSuiteFileReferenceValidationException,
+    EvalSuiteFileValidationException,
     EvalSuiteNotFoundException,
+    EvalSuiteValidationException,
     EvaluationArtifact,
     EvaluationArtifactType,
     EvaluationRequest,
     EvaluationRequestValidationException,
+    EvaluationRequestVariantsNotInEvalSuiteException,
+    LlmCliProcessContainmentFailedException,
+    LlmCliProcessResumeFailedException,
     LlmCliStartFailedException,
     Scorecard,
     ScorecardRow,
@@ -65,6 +85,11 @@ from prompt_evals import (
     TrialIdentity,
     VariantTiming,
 )
+from prompt_evals.managers.exceptions.process_runner_exceptions import (
+    ProcessContainmentFailedException,
+    ProcessResumeFailedException,
+    ProcessStartFailedException,
+)
 
 BASELINE_PROMPT_MARKER: Final[str] = "Baseline prompt."
 CANDIDATE_PROMPT_MARKER: Final[str] = "Candidate prompt."
@@ -72,21 +97,25 @@ CLAUDE_EXECUTABLE_VARIABLE: Final[str] = "PROMPT_EVALS_CLAUDE_EXECUTABLE"
 SESSION_TIMEOUT_SECONDS_VARIABLE: Final[str] = "PROMPT_EVALS_SESSION_TIMEOUT_SECONDS"
 GRADER_MODEL_VARIABLE: Final[str] = "PROMPT_EVALS_GRADER_MODEL"
 GRADER_EFFORT_VARIABLE: Final[str] = "PROMPT_EVALS_GRADER_EFFORT"
+GRADER_ASSISTANT_VARIABLE: Final[str] = "PROMPT_EVALS_GRADER_ASSISTANT"
+MAXIMUM_CONCURRENT_TRIALS_VARIABLE: Final[str] = "PROMPT_EVALS_MAXIMUM_CONCURRENT_TRIALS"
+MAXIMUM_CONCURRENT_GRADINGS_VARIABLE: Final[str] = "PROMPT_EVALS_MAXIMUM_CONCURRENT_GRADINGS"
 SESSION_TIMEOUT_SECONDS: Final[str] = "30"
 GRADER_EFFORT: Final[str] = "low"
 EVAL_SUITE_DEFINITION_FILE_NAME: Final[str] = "eval_suite.json"
 VALIDATION_PROBLEM_COUNT_ENTRY_NAME: Final[str] = "ValidationProblemCount"
+EVAL_SUITE_DIRECTORY_ENTRY_NAME: Final[str] = "EvalSuiteDirectory"
 CLAUDE_CODE_ASSISTANT_NAME: Final[str] = "Claude Code"
 
 
-def create_trial_session(answer_text: str, *, ran_python: bool = True, shell_command: str = "python totals.py") -> ScriptedEventStreamSession:
+def create_trial_session(answer_text: str, *, ran_python: bool = True, shell_command: str = "python totals.py") -> ScriptedClaudeEventStreamSession:
     # The scripted process is the Claude Code CLI, so the shell tool appears under Claude's name for it, "Bash".
-    scripted_tool_calls: tuple[ScriptedClaudeToolCall, ...] = (
+    scripted_claude_tool_calls: tuple[ScriptedClaudeToolCall, ...] = (
         (ScriptedClaudeToolCall(tool_name="Bash", tool_input={"command": shell_command}, tool_result_text=RandomDataGenerator.create_random_word()),)
         if ran_python
         else ()
     )
-    return ScriptedEventStreamSession(final_text=answer_text, scripted_tool_calls=scripted_tool_calls)
+    return ScriptedClaudeEventStreamSession(final_text=answer_text, scripted_claude_tool_calls=scripted_claude_tool_calls)
 
 
 def create_random_grader_model_name() -> str:
@@ -100,6 +129,15 @@ def create_override_by_environment_variable_name(grader_model_name: str) -> dict
         GRADER_MODEL_VARIABLE: grader_model_name,
         GRADER_EFFORT_VARIABLE: GRADER_EFFORT,
     }
+
+
+def describe_json_decode_error(invalid_json_text: str) -> str:
+    # The standard library's own diagnosis of the text is the expected value, so the test does not depend on its wording.
+    try:
+        json.loads(invalid_json_text)
+    except json.JSONDecodeError as json_decode_error:
+        return str(json_decode_error)
+    raise AssertionError(f"The test expected invalid JSON; {invalid_json_text!r} parsed")
 
 
 def create_evaluation_request(sample_eval_suite: SampleEvalSuite, repetitions: int, variant_names: tuple[str, ...] = ()) -> EvaluationRequest:
@@ -170,12 +208,12 @@ class TestRunEvaluationExpectedPaths:
         await domain_facade.run_evaluation(evaluation_request, ArtifactRecorder().record_evaluation_artifact)
 
         # Assert
-        actual_trial_invocations: tuple[CapturedCliInvocation, ...] = tuple(
+        actual_trial_captured_cli_invocations: tuple[CapturedCliInvocation, ...] = tuple(
             captured_claude_invocation
             for captured_claude_invocation in test_mediator_coding_assistant_cli.captured_claude_invocations
             if not captured_claude_invocation.prompt_text.startswith("#")
         )
-        ClaudeInvocationAsserter.assert_expected_and_actual_are_equal(expected_claude_invocation, actual_trial_invocations)
+        ClaudeInvocationAsserter.assert_expected_and_actual_are_equal(expected_claude_invocation, actual_trial_captured_cli_invocations)
 
     async def test_RunEvaluation_WhenAnswersAreGraded_ThenGradersRunInSeparateToolLessSessionsWithTheGraderModel(self, tmp_path: Path) -> None:
         # Arrange
@@ -206,12 +244,12 @@ class TestRunEvaluationExpectedPaths:
         await domain_facade.run_evaluation(evaluation_request, ArtifactRecorder().record_evaluation_artifact)
 
         # Assert
-        actual_grader_invocations: tuple[CapturedCliInvocation, ...] = tuple(
+        actual_grader_captured_cli_invocations: tuple[CapturedCliInvocation, ...] = tuple(
             captured_claude_invocation
             for captured_claude_invocation in test_mediator_coding_assistant_cli.captured_claude_invocations
             if captured_claude_invocation.prompt_text.startswith("#")
         )
-        ClaudeInvocationAsserter.assert_expected_and_actual_are_equal(expected_claude_invocation, actual_grader_invocations)
+        ClaudeInvocationAsserter.assert_expected_and_actual_are_equal(expected_claude_invocation, actual_grader_captured_cli_invocations)
 
     async def test_RunEvaluation_WhenEvaluationCompletes_ThenEveryTrialArtifactAndTheScorecardAreEmitted(self, tmp_path: Path) -> None:
         # Arrange
@@ -304,7 +342,7 @@ class TestRunEvaluationGradingOutcomes:
     ) -> None:
         # Arrange
         sample_eval_suite: SampleEvalSuite = SampleEvalSuiteBuilder.write_sample_eval_suite(tmp_path)
-        wrong_total_amount: str = "1.23"
+        wrong_total_amount: str = RandomDataGenerator.create_random_amount_text()
         baseline_answer_text: str = f"Baseline answer {RandomDataGenerator.create_random_word()}."
         candidate_answer_text: str = f"Candidate answer {RandomDataGenerator.create_random_word()}."
         test_mediator_coding_assistant_cli: TestMediatorCodingAssistantCli = TestMediatorCodingAssistantCli()
@@ -318,10 +356,10 @@ class TestRunEvaluationGradingOutcomes:
         domain_facade: DomainFacade = create_domain_facade(
             test_mediator_coding_assistant_cli, create_override_by_environment_variable_name(create_random_grader_model_name())
         )
-        expected_candidate_rows: list[ExpectedScorecardRow] = create_expected_rows_for_every_check(
+        expected_candidate_scorecard_rows: list[ExpectedScorecardRow] = create_expected_rows_for_every_check(
             CANDIDATE_VARIANT_NAME, trial_count=1, passed_count=1
         )
-        expected_candidate_rows[0] = ExpectedScorecardRow(
+        expected_candidate_scorecard_rows[0] = ExpectedScorecardRow(
             check_name=TOTAL_AMOUNT_CHECK_NAME,
             variant_name=CANDIDATE_VARIANT_NAME,
             trial_count=1,
@@ -334,7 +372,7 @@ class TestRunEvaluationGradingOutcomes:
             passes_gate=False,
             expected_scorecard_rows=interleave_rows_by_check(
                 create_expected_rows_for_every_check(BASELINE_VARIANT_NAME, trial_count=1, passed_count=1),
-                expected_candidate_rows,
+                expected_candidate_scorecard_rows,
             ),
         )
 
@@ -357,10 +395,10 @@ class TestRunEvaluationGradingOutcomes:
         domain_facade: DomainFacade = create_domain_facade(
             test_mediator_coding_assistant_cli, create_override_by_environment_variable_name(create_random_grader_model_name())
         )
-        expected_baseline_rows: list[ExpectedScorecardRow] = create_expected_rows_for_every_check(
+        expected_baseline_scorecard_rows: list[ExpectedScorecardRow] = create_expected_rows_for_every_check(
             BASELINE_VARIANT_NAME, trial_count=1, passed_count=1
         )
-        expected_baseline_rows[2] = ExpectedScorecardRow(
+        expected_baseline_scorecard_rows[2] = ExpectedScorecardRow(
             check_name=CODE_EXECUTED_CHECK_NAME,
             variant_name=BASELINE_VARIANT_NAME,
             trial_count=1,
@@ -372,7 +410,7 @@ class TestRunEvaluationGradingOutcomes:
         expected_scorecard: ExpectedScorecard = ExpectedScorecard(
             passes_gate=True,
             expected_scorecard_rows=interleave_rows_by_check(
-                expected_baseline_rows,
+                expected_baseline_scorecard_rows,
                 create_expected_rows_for_every_check(CANDIDATE_VARIANT_NAME, trial_count=1, passed_count=1),
             ),
         )
@@ -422,10 +460,10 @@ class TestRunEvaluationGradingOutcomes:
         domain_facade: DomainFacade = create_domain_facade(
             test_mediator_coding_assistant_cli, create_override_by_environment_variable_name(create_random_grader_model_name())
         )
-        expected_candidate_rows: list[ExpectedScorecardRow] = create_expected_rows_for_every_check(
+        expected_candidate_scorecard_rows: list[ExpectedScorecardRow] = create_expected_rows_for_every_check(
             CANDIDATE_VARIANT_NAME, trial_count=1, passed_count=1
         )
-        expected_candidate_rows[3] = ExpectedScorecardRow(
+        expected_candidate_scorecard_rows[3] = ExpectedScorecardRow(
             check_name=TABLES_FIRST_CHECK_NAME,
             variant_name=CANDIDATE_VARIANT_NAME,
             trial_count=1,
@@ -434,7 +472,7 @@ class TestRunEvaluationGradingOutcomes:
             meets_minimum_pass_rate=False,
             failure_reason_phrases=(judge_reason,),
         )
-        expected_scorecard: ExpectedScorecard = ExpectedScorecard(passes_gate=False, expected_scorecard_rows=tuple(expected_candidate_rows))
+        expected_scorecard: ExpectedScorecard = ExpectedScorecard(passes_gate=False, expected_scorecard_rows=tuple(expected_candidate_scorecard_rows))
 
         # Act
         actual_scorecard: Scorecard = await domain_facade.run_evaluation(evaluation_request, ArtifactRecorder().record_evaluation_artifact)
@@ -480,13 +518,13 @@ class TestRunEvaluationFailurePaths:
         test_mediator_coding_assistant_cli: TestMediatorCodingAssistantCli = TestMediatorCodingAssistantCli()
         test_mediator_coding_assistant_cli.script_sessions(
             (CANDIDATE_PROMPT_MARKER,),
-            ScriptedFailedStartSession(raised_exception=TimeoutError()),
+            ScriptedTimedOutSession(),
             create_trial_session(surviving_answer_text),
         )
         script_correct_grading(test_mediator_coding_assistant_cli, sample_eval_suite)
         evaluation_request: EvaluationRequest = create_evaluation_request(sample_eval_suite, repetitions=2, variant_names=(CANDIDATE_VARIANT_NAME,))
         override_by_environment_variable_name: dict[str, str] = create_override_by_environment_variable_name(create_random_grader_model_name())
-        override_by_environment_variable_name["PROMPT_EVALS_MAXIMUM_CONCURRENT_TRIALS"] = "1"
+        override_by_environment_variable_name[MAXIMUM_CONCURRENT_TRIALS_VARIABLE] = "1"
         domain_facade: DomainFacade = create_domain_facade(test_mediator_coding_assistant_cli, override_by_environment_variable_name)
         expected_scorecard: ExpectedScorecard = ExpectedScorecard(
             passes_gate=False,
@@ -550,13 +588,13 @@ class TestRunEvaluationFailurePaths:
         candidate_answer_text: str = f"Candidate answer {RandomDataGenerator.create_random_sentence()}"
         test_mediator_coding_assistant_cli: TestMediatorCodingAssistantCli = TestMediatorCodingAssistantCli()
         test_mediator_coding_assistant_cli.script_sessions((CANDIDATE_PROMPT_MARKER,), create_trial_session(candidate_answer_text))
-        test_mediator_coding_assistant_cli.script_sessions((FACT_EXTRACTION_PROMPT_HEADING,), ScriptedEventStreamSession(structured_output=None))
+        test_mediator_coding_assistant_cli.script_sessions((FACT_EXTRACTION_PROMPT_HEADING,), ScriptedAnswerSession(structured_output=None))
         script_correct_grading(test_mediator_coding_assistant_cli, sample_eval_suite)
         evaluation_request: EvaluationRequest = create_evaluation_request(sample_eval_suite, repetitions=1, variant_names=(CANDIDATE_VARIANT_NAME,))
         domain_facade: DomainFacade = create_domain_facade(
             test_mediator_coding_assistant_cli, create_override_by_environment_variable_name(create_random_grader_model_name())
         )
-        expected_errored_fact_rows: list[ExpectedScorecardRow] = [
+        expected_errored_fact_scorecard_rows: list[ExpectedScorecardRow] = [
             ExpectedScorecardRow(
                 check_name=check_name,
                 variant_name=CANDIDATE_VARIANT_NAME,
@@ -571,7 +609,7 @@ class TestRunEvaluationFailurePaths:
         expected_scorecard: ExpectedScorecard = ExpectedScorecard(
             passes_gate=False,
             expected_scorecard_rows=(
-                *expected_errored_fact_rows,
+                *expected_errored_fact_scorecard_rows,
                 *create_expected_rows_for_every_check(CANDIDATE_VARIANT_NAME, trial_count=1, passed_count=1)[2:],
             ),
         )
@@ -595,7 +633,7 @@ class TestRunEvaluationFailurePaths:
         error_result_text: str = f"API Error: {RandomDataGenerator.create_random_sentence()}"
         test_mediator_coding_assistant_cli: TestMediatorCodingAssistantCli = TestMediatorCodingAssistantCli()
         test_mediator_coding_assistant_cli.script_sessions(
-            (CANDIDATE_PROMPT_MARKER,), ScriptedEventStreamSession(final_text=error_result_text, is_error=True, exit_code=1)
+            (CANDIDATE_PROMPT_MARKER,), ScriptedClaudeEventStreamSession(final_text=error_result_text, is_error=True, exit_code=1)
         )
         script_correct_grading(test_mediator_coding_assistant_cli, sample_eval_suite)
         evaluation_request: EvaluationRequest = create_evaluation_request(sample_eval_suite, repetitions=1, variant_names=(CANDIDATE_VARIANT_NAME,))
@@ -633,7 +671,7 @@ class TestRunEvaluationFailurePaths:
         error_message: str = RandomDataGenerator.create_random_sentence()
         test_mediator_coding_assistant_cli: TestMediatorCodingAssistantCli = TestMediatorCodingAssistantCli()
         test_mediator_coding_assistant_cli.script_sessions(
-            (CANDIDATE_PROMPT_MARKER,), ScriptedEventStreamSession(result_subtype=error_result_subtype, error_messages=(error_message,))
+            (CANDIDATE_PROMPT_MARKER,), ScriptedClaudeEventStreamSession(result_subtype=error_result_subtype, error_messages=(error_message,))
         )
         script_correct_grading(test_mediator_coding_assistant_cli, sample_eval_suite)
         evaluation_request: EvaluationRequest = create_evaluation_request(sample_eval_suite, repetitions=1, variant_names=(CANDIDATE_VARIANT_NAME,))
@@ -662,22 +700,29 @@ class TestRunEvaluationFailurePaths:
         # Assert
         ScorecardAsserter.assert_expected_and_actual_are_equal(expected_scorecard, actual_scorecard.passes_gate, actual_scorecard.scorecard_rows)
 
-    @pytest.mark.parametrize("start_error", [FileNotFoundError(), PermissionError()], ids=["missing", "not-executable"])
-    async def test_RunEvaluation_WhenTheClaudeCliCannotBeStarted_ThenClaudeCliStartFailedExceptionStopsTheEvaluation(
+    @pytest.mark.parametrize(
+        "start_error",
+        [FileNotFoundError(errno.ENOENT, "No such file or directory"), PermissionError(errno.EACCES, "Permission denied")],
+        ids=["missing", "not-executable"],
+    )
+    async def test_RunEvaluation_WhenTheClaudeCliCannotBeStarted_ThenLlmCliStartFailedExceptionStopsTheEvaluation(
         self, tmp_path: Path, start_error: OSError
     ) -> None:
         # Arrange
         sample_eval_suite: SampleEvalSuite = SampleEvalSuiteBuilder.write_sample_eval_suite(tmp_path)
         test_mediator_coding_assistant_cli: TestMediatorCodingAssistantCli = TestMediatorCodingAssistantCli()
-        test_mediator_coding_assistant_cli.script_sessions((CANDIDATE_PROMPT_MARKER,), ScriptedFailedStartSession(raised_exception=start_error))
+        test_mediator_coding_assistant_cli.script_sessions(
+            (CANDIDATE_PROMPT_MARKER,),
+            ScriptedFailedStartSession(raised_exception=ProcessStartFailedException(CLAUDE_EXECUTABLE_PATH, start_error)),
+        )
         evaluation_request: EvaluationRequest = create_evaluation_request(sample_eval_suite, repetitions=1, variant_names=(CANDIDATE_VARIANT_NAME,))
         domain_facade: DomainFacade = create_domain_facade(
             test_mediator_coding_assistant_cli, create_override_by_environment_variable_name(create_random_grader_model_name())
         )
-        expected_message_phrases: tuple[str, ...] = ("could not be started", CLAUDE_EXECUTABLE_VARIABLE)
+        expected_message_phrases: tuple[str, ...] = ("could not be started", "Install Claude Code", CLAUDE_EXECUTABLE_VARIABLE)
         expected_contextual_entries_by_name: dict[str, object] = {
             "AssistantName": CLAUDE_CODE_ASSISTANT_NAME,
-            "ExecutablePath": "claude",
+            "ExecutablePath": CLAUDE_EXECUTABLE_PATH,
             "StartFailure": f"{type(start_error).__name__}: {start_error}",
             "ExceptionType": LlmCliStartFailedException.__name__,
         }
@@ -691,7 +736,85 @@ class TestRunEvaluationFailurePaths:
             expected_exception_type=LlmCliStartFailedException,
             expected_message_phrases=expected_message_phrases,
             expected_contextual_entries_by_name=expected_contextual_entries_by_name,
-            actual_exception=exception_info.value,
+            actual_prompt_evals_base_exception=exception_info.value,
+        )
+
+    async def test_RunEvaluation_WhenTheStartedClaudeCliProcessCannotBeContained_ThenLlmCliProcessContainmentFailedExceptionStopsTheEvaluation(
+        self, tmp_path: Path
+    ) -> None:
+        # Arrange
+        sample_eval_suite: SampleEvalSuite = SampleEvalSuiteBuilder.write_sample_eval_suite(tmp_path)
+        containment_error: PermissionError = PermissionError(RandomDataGenerator.create_random_sentence())
+        test_mediator_coding_assistant_cli: TestMediatorCodingAssistantCli = TestMediatorCodingAssistantCli()
+        test_mediator_coding_assistant_cli.script_sessions(
+            (CANDIDATE_PROMPT_MARKER,),
+            ScriptedFailedStartSession(
+                raised_exception=ProcessContainmentFailedException(RandomDataGenerator.create_random_process_id(), containment_error)
+            ),
+        )
+        evaluation_request: EvaluationRequest = create_evaluation_request(sample_eval_suite, repetitions=1, variant_names=(CANDIDATE_VARIANT_NAME,))
+        domain_facade: DomainFacade = create_domain_facade(
+            test_mediator_coding_assistant_cli, create_override_by_environment_variable_name(create_random_grader_model_name())
+        )
+        expected_message_phrases: tuple[str, ...] = (CLAUDE_CODE_ASSISTANT_NAME, evaluation_request.model_name, "could not be contained")
+        # The process did start, so the exception must not send the user to reinstall Claude Code or change its executable setting.
+        unexpected_message_phrases: tuple[str, ...] = ("could not be started", "Install Claude Code", CLAUDE_EXECUTABLE_VARIABLE)
+        expected_contextual_entries_by_name: dict[str, object] = {
+            "AssistantName": CLAUDE_CODE_ASSISTANT_NAME,
+            "ModelName": evaluation_request.model_name,
+            "ContainmentFailure": f"{type(containment_error).__name__}: {containment_error}",
+            "ExceptionType": LlmCliProcessContainmentFailedException.__name__,
+        }
+
+        # Act
+        with pytest.raises(LlmCliProcessContainmentFailedException) as exception_info:
+            await domain_facade.run_evaluation(evaluation_request, ArtifactRecorder().record_evaluation_artifact)
+
+        # Assert
+        ExceptionAsserter.assert_expected_and_actual_are_equal(
+            expected_exception_type=LlmCliProcessContainmentFailedException,
+            expected_message_phrases=expected_message_phrases,
+            expected_contextual_entries_by_name=expected_contextual_entries_by_name,
+            actual_prompt_evals_base_exception=exception_info.value,
+            unexpected_message_phrases=unexpected_message_phrases,
+        )
+
+    async def test_RunEvaluation_WhenTheStartedClaudeCliProcessCannotBeResumed_ThenLlmCliProcessResumeFailedExceptionStopsTheEvaluation(
+        self, tmp_path: Path
+    ) -> None:
+        # Arrange
+        sample_eval_suite: SampleEvalSuite = SampleEvalSuiteBuilder.write_sample_eval_suite(tmp_path)
+        resume_error: PermissionError = PermissionError(RandomDataGenerator.create_random_sentence())
+        test_mediator_coding_assistant_cli: TestMediatorCodingAssistantCli = TestMediatorCodingAssistantCli()
+        test_mediator_coding_assistant_cli.script_sessions(
+            (CANDIDATE_PROMPT_MARKER,),
+            ScriptedFailedStartSession(raised_exception=ProcessResumeFailedException(RandomDataGenerator.create_random_process_id(), resume_error)),
+        )
+        evaluation_request: EvaluationRequest = create_evaluation_request(sample_eval_suite, repetitions=1, variant_names=(CANDIDATE_VARIANT_NAME,))
+        domain_facade: DomainFacade = create_domain_facade(
+            test_mediator_coding_assistant_cli, create_override_by_environment_variable_name(create_random_grader_model_name())
+        )
+        expected_message_phrases: tuple[str, ...] = (CLAUDE_CODE_ASSISTANT_NAME, evaluation_request.model_name, "could not be resumed")
+        # The process was created, so the exception must not send the user to reinstall Claude Code or change its executable setting.
+        unexpected_message_phrases: tuple[str, ...] = ("could not be started", "Install Claude Code", CLAUDE_EXECUTABLE_VARIABLE)
+        expected_contextual_entries_by_name: dict[str, object] = {
+            "AssistantName": CLAUDE_CODE_ASSISTANT_NAME,
+            "ModelName": evaluation_request.model_name,
+            "ResumeFailure": f"{type(resume_error).__name__}: {resume_error}",
+            "ExceptionType": LlmCliProcessResumeFailedException.__name__,
+        }
+
+        # Act
+        with pytest.raises(LlmCliProcessResumeFailedException) as exception_info:
+            await domain_facade.run_evaluation(evaluation_request, ArtifactRecorder().record_evaluation_artifact)
+
+        # Assert
+        ExceptionAsserter.assert_expected_and_actual_are_equal(
+            expected_exception_type=LlmCliProcessResumeFailedException,
+            expected_message_phrases=expected_message_phrases,
+            expected_contextual_entries_by_name=expected_contextual_entries_by_name,
+            actual_prompt_evals_base_exception=exception_info.value,
+            unexpected_message_phrases=unexpected_message_phrases,
         )
 
     async def test_RunEvaluation_WhenTheHostCannotPersistAnArtifact_ThenArtifactCallbackExceptionNamesTheArtifact(self, tmp_path: Path) -> None:
@@ -730,7 +853,7 @@ class TestRunEvaluationFailurePaths:
             expected_exception_type=ArtifactCallbackException,
             expected_message_phrases=expected_message_phrases,
             expected_contextual_entries_by_name=expected_contextual_entries_by_name,
-            actual_exception=exception_info.value,
+            actual_prompt_evals_base_exception=exception_info.value,
         )
 
 
@@ -740,6 +863,7 @@ class TestRunEvaluationInvalidInput:
         # Arrange
         sample_eval_suite: SampleEvalSuite = SampleEvalSuiteBuilder.write_sample_eval_suite(tmp_path)
         undefined_variant_name: str = f"variant-{RandomDataGenerator.create_random_word()}"
+        other_undefined_variant_name: str = f"variant-{RandomDataGenerator.create_random_word()}"
         domain_facade: DomainFacade = create_domain_facade(
             TestMediatorCodingAssistantCli(), create_override_by_environment_variable_name(create_random_grader_model_name())
         )
@@ -752,7 +876,7 @@ class TestRunEvaluationInvalidInput:
             variant_names=(CANDIDATE_VARIANT_NAME, CANDIDATE_VARIANT_NAME),
         )
         unknown_variant_evaluation_request: EvaluationRequest = create_evaluation_request(
-            sample_eval_suite, repetitions=1, variant_names=(undefined_variant_name,)
+            sample_eval_suite, repetitions=1, variant_names=(undefined_variant_name, CANDIDATE_VARIANT_NAME, other_undefined_variant_name)
         )
         expected_invalid_request_message_phrases: tuple[str, ...] = (
             "repetitions must be at least 1 (was 0)",
@@ -760,16 +884,18 @@ class TestRunEvaluationInvalidInput:
             f"variant '{CANDIDATE_VARIANT_NAME}' is requested 2 times",
         )
         expected_invalid_request_contextual_entries_by_name: dict[str, object] = {VALIDATION_PROBLEM_COUNT_ENTRY_NAME: 3}
-        expected_unknown_variant_message_phrases: tuple[str, ...] = (
-            f"variant '{undefined_variant_name}' is not defined",
-            f"{BASELINE_VARIANT_NAME}, {CANDIDATE_VARIANT_NAME}",
+        # One problem per undefined variant, each naming the suite and the variants it does define.
+        expected_unknown_variant_message_phrases: tuple[str, ...] = tuple(
+            f"variant '{expected_undefined_variant_name}' is not defined by suite '{sample_eval_suite.eval_suite_name}' "
+            f"(defined: {BASELINE_VARIANT_NAME}, {CANDIDATE_VARIANT_NAME})"
+            for expected_undefined_variant_name in (undefined_variant_name, other_undefined_variant_name)
         )
-        expected_unknown_variant_contextual_entries_by_name: dict[str, object] = {VALIDATION_PROBLEM_COUNT_ENTRY_NAME: 1}
+        expected_unknown_variant_contextual_entries_by_name: dict[str, object] = {VALIDATION_PROBLEM_COUNT_ENTRY_NAME: 2}
 
         # Act
         with pytest.raises(EvaluationRequestValidationException) as invalid_request_exception_info:
             await domain_facade.run_evaluation(invalid_evaluation_request, ArtifactRecorder().record_evaluation_artifact)
-        with pytest.raises(EvaluationRequestValidationException) as unknown_variant_exception_info:
+        with pytest.raises(EvaluationRequestVariantsNotInEvalSuiteException) as unknown_variant_exception_info:
             await domain_facade.run_evaluation(unknown_variant_evaluation_request, ArtifactRecorder().record_evaluation_artifact)
 
         # Assert
@@ -777,13 +903,13 @@ class TestRunEvaluationInvalidInput:
             expected_exception_type=EvaluationRequestValidationException,
             expected_message_phrases=expected_invalid_request_message_phrases,
             expected_contextual_entries_by_name=expected_invalid_request_contextual_entries_by_name,
-            actual_exception=invalid_request_exception_info.value,
+            actual_prompt_evals_base_exception=invalid_request_exception_info.value,
         )
         ExceptionAsserter.assert_expected_and_actual_are_equal(
-            expected_exception_type=EvaluationRequestValidationException,
+            expected_exception_type=EvaluationRequestVariantsNotInEvalSuiteException,
             expected_message_phrases=expected_unknown_variant_message_phrases,
             expected_contextual_entries_by_name=expected_unknown_variant_contextual_entries_by_name,
-            actual_exception=unknown_variant_exception_info.value,
+            actual_prompt_evals_base_exception=unknown_variant_exception_info.value,
         )
 
     async def test_RunEvaluation_WhenTheSuiteDirectoryHasNoSuiteDefinition_ThenEvalSuiteNotFoundExceptionIsRaised(self, tmp_path: Path) -> None:
@@ -810,7 +936,7 @@ class TestRunEvaluationInvalidInput:
             expected_exception_type=EvalSuiteNotFoundException,
             expected_message_phrases=expected_message_phrases,
             expected_contextual_entries_by_name=expected_contextual_entries_by_name,
-            actual_exception=exception_info.value,
+            actual_prompt_evals_base_exception=exception_info.value,
         )
 
     async def test_RunEvaluation_WhenTheSuiteReferencesUndefinedNames_ThenEveryReferenceProblemIsReportedTogether(self, tmp_path: Path) -> None:
@@ -840,21 +966,24 @@ class TestRunEvaluationInvalidInput:
             f"fact '{undefined_fact_name}', which the fact extraction schema does not define",
             f"fact '{undefined_fact_name}', which case '{CASE_NAME}' has no expected value for",
         )
-        expected_contextual_entries_by_name: dict[str, object] = {"DefinitionProblemCount": 3}
+        expected_contextual_entries_by_name: dict[str, object] = {
+            EVAL_SUITE_DIRECTORY_ENTRY_NAME: str(sample_eval_suite.eval_suite_directory),
+            "DefinitionProblemCount": 3,
+        }
 
         # Act
-        with pytest.raises(EvalSuiteDefinitionInvalidException) as exception_info:
+        with pytest.raises(EvalSuiteValidationException) as exception_info:
             await domain_facade.run_evaluation(evaluation_request, ArtifactRecorder().record_evaluation_artifact)
 
         # Assert
         ExceptionAsserter.assert_expected_and_actual_are_equal(
-            expected_exception_type=EvalSuiteDefinitionInvalidException,
+            expected_exception_type=EvalSuiteValidationException,
             expected_message_phrases=expected_message_phrases,
             expected_contextual_entries_by_name=expected_contextual_entries_by_name,
-            actual_exception=exception_info.value,
+            actual_prompt_evals_base_exception=exception_info.value,
         )
 
-    async def test_RunEvaluation_WhenACheckHasAnOutOfRangeMinimumPassRate_ThenEvalSuiteDefinitionInvalidExceptionNamesTheCheck(
+    async def test_RunEvaluation_WhenACheckHasAnOutOfRangeMinimumPassRate_ThenEvalSuiteFileValidationExceptionNamesTheCheck(
         self, tmp_path: Path
     ) -> None:
         # Arrange
@@ -876,18 +1005,21 @@ class TestRunEvaluationInvalidInput:
         )
         evaluation_request: EvaluationRequest = create_evaluation_request(sample_eval_suite, repetitions=1)
         expected_message_phrases: tuple[str, ...] = (f"check '{out_of_range_check_name}' needs a minimum_pass_rate between 0 and 1",)
-        expected_contextual_entries_by_name: dict[str, object] = {"DefinitionProblemCount": 1}
+        expected_contextual_entries_by_name: dict[str, object] = {
+            EVAL_SUITE_DIRECTORY_ENTRY_NAME: str(sample_eval_suite.eval_suite_directory),
+            "DefinitionProblemCount": 1,
+        }
 
         # Act
-        with pytest.raises(EvalSuiteDefinitionInvalidException) as exception_info:
+        with pytest.raises(EvalSuiteFileValidationException) as exception_info:
             await domain_facade.run_evaluation(evaluation_request, ArtifactRecorder().record_evaluation_artifact)
 
         # Assert
         ExceptionAsserter.assert_expected_and_actual_are_equal(
-            expected_exception_type=EvalSuiteDefinitionInvalidException,
+            expected_exception_type=EvalSuiteFileValidationException,
             expected_message_phrases=expected_message_phrases,
             expected_contextual_entries_by_name=expected_contextual_entries_by_name,
-            actual_exception=exception_info.value,
+            actual_prompt_evals_base_exception=exception_info.value,
         )
 
     async def test_RunEvaluation_WhenSuiteNamesAreUnsafeOrCollideAndAmountsAreNotNumbers_ThenEveryProblemIsReportedTogether(
@@ -921,18 +1053,21 @@ class TestRunEvaluationInvalidInput:
             "gated_variant_names must name at least one variant",
             f"accepts '{non_numeric_amount}' for '{TOTAL_FACT_NAME}'",
         )
-        expected_contextual_entries_by_name: dict[str, object] = {"DefinitionProblemCount": 5}
+        expected_contextual_entries_by_name: dict[str, object] = {
+            EVAL_SUITE_DIRECTORY_ENTRY_NAME: str(sample_eval_suite.eval_suite_directory),
+            "DefinitionProblemCount": 5,
+        }
 
         # Act
-        with pytest.raises(EvalSuiteDefinitionInvalidException) as exception_info:
+        with pytest.raises(EvalSuiteValidationException) as exception_info:
             await domain_facade.run_evaluation(evaluation_request, ArtifactRecorder().record_evaluation_artifact)
 
         # Assert
         ExceptionAsserter.assert_expected_and_actual_are_equal(
-            expected_exception_type=EvalSuiteDefinitionInvalidException,
+            expected_exception_type=EvalSuiteValidationException,
             expected_message_phrases=expected_message_phrases,
             expected_contextual_entries_by_name=expected_contextual_entries_by_name,
-            actual_exception=exception_info.value,
+            actual_prompt_evals_base_exception=exception_info.value,
         )
 
     async def test_RunEvaluation_WhenACheckNamesAnUnknownGrader_ThenOnlyTheUnknownGraderIsReported(self, tmp_path: Path) -> None:
@@ -956,18 +1091,21 @@ class TestRunEvaluationInvalidInput:
         )
         evaluation_request: EvaluationRequest = create_evaluation_request(sample_eval_suite, repetitions=1)
         expected_message_phrases: tuple[str, ...] = (f"check '{unknown_grader_check_name}' has unknown grader '{unknown_grader_name}'",)
-        expected_contextual_entries_by_name: dict[str, object] = {"DefinitionProblemCount": 1}
+        expected_contextual_entries_by_name: dict[str, object] = {
+            EVAL_SUITE_DIRECTORY_ENTRY_NAME: str(sample_eval_suite.eval_suite_directory),
+            "DefinitionProblemCount": 1,
+        }
 
         # Act
-        with pytest.raises(EvalSuiteDefinitionInvalidException) as exception_info:
+        with pytest.raises(EvalSuiteFileValidationException) as exception_info:
             await domain_facade.run_evaluation(evaluation_request, ArtifactRecorder().record_evaluation_artifact)
 
         # Assert
         ExceptionAsserter.assert_expected_and_actual_are_equal(
-            expected_exception_type=EvalSuiteDefinitionInvalidException,
+            expected_exception_type=EvalSuiteFileValidationException,
             expected_message_phrases=expected_message_phrases,
             expected_contextual_entries_by_name=expected_contextual_entries_by_name,
-            actual_exception=exception_info.value,
+            actual_prompt_evals_base_exception=exception_info.value,
         )
 
     async def test_RunEvaluation_WhenTheSuiteNamesToolsTheWayOneAssistantDoes_ThenEveryUnknownToolKindIsReported(self, tmp_path: Path) -> None:
@@ -996,23 +1134,24 @@ class TestRunEvaluationInvalidInput:
             f"check '{CODE_EXECUTED_CHECK_NAME}' has unknown tool kind '{assistant_specific_tool_name}'",
             "expected one of shell, read_file, write_file, edit_file, find_files, search_file_contents",
         )
-        expected_contextual_entries_by_name: dict[str, object] = {"DefinitionProblemCount": 2}
+        expected_contextual_entries_by_name: dict[str, object] = {
+            EVAL_SUITE_DIRECTORY_ENTRY_NAME: str(sample_eval_suite.eval_suite_directory),
+            "DefinitionProblemCount": 2,
+        }
 
         # Act
-        with pytest.raises(EvalSuiteDefinitionInvalidException) as exception_info:
+        with pytest.raises(EvalSuiteFileValidationException) as exception_info:
             await domain_facade.run_evaluation(evaluation_request, ArtifactRecorder().record_evaluation_artifact)
 
         # Assert
         ExceptionAsserter.assert_expected_and_actual_are_equal(
-            expected_exception_type=EvalSuiteDefinitionInvalidException,
+            expected_exception_type=EvalSuiteFileValidationException,
             expected_message_phrases=expected_message_phrases,
             expected_contextual_entries_by_name=expected_contextual_entries_by_name,
-            actual_exception=exception_info.value,
+            actual_prompt_evals_base_exception=exception_info.value,
         )
 
-    async def test_RunEvaluation_WhenAnExpectedFactAcceptsOnlyBlankValues_ThenEvalSuiteDefinitionInvalidExceptionNamesTheFact(
-        self, tmp_path: Path
-    ) -> None:
+    async def test_RunEvaluation_WhenAnExpectedFactAcceptsOnlyBlankValues_ThenEvalSuiteValidationExceptionNamesTheFact(self, tmp_path: Path) -> None:
         # Arrange
         sample_eval_suite: SampleEvalSuite = SampleEvalSuiteBuilder.write_sample_eval_suite(tmp_path)
         SampleEvalSuiteBuilder.write_expected_facts(
@@ -1023,21 +1162,24 @@ class TestRunEvaluationInvalidInput:
         )
         evaluation_request: EvaluationRequest = create_evaluation_request(sample_eval_suite, repetitions=1)
         expected_message_phrases: tuple[str, ...] = (f"case '{CASE_NAME}' expects fact '{STATUS_FACT_NAME}' but accepts no non-blank value",)
-        expected_contextual_entries_by_name: dict[str, object] = {"DefinitionProblemCount": 1}
+        expected_contextual_entries_by_name: dict[str, object] = {
+            EVAL_SUITE_DIRECTORY_ENTRY_NAME: str(sample_eval_suite.eval_suite_directory),
+            "DefinitionProblemCount": 1,
+        }
 
         # Act
-        with pytest.raises(EvalSuiteDefinitionInvalidException) as exception_info:
+        with pytest.raises(EvalSuiteValidationException) as exception_info:
             await domain_facade.run_evaluation(evaluation_request, ArtifactRecorder().record_evaluation_artifact)
 
         # Assert
         ExceptionAsserter.assert_expected_and_actual_are_equal(
-            expected_exception_type=EvalSuiteDefinitionInvalidException,
+            expected_exception_type=EvalSuiteValidationException,
             expected_message_phrases=expected_message_phrases,
             expected_contextual_entries_by_name=expected_contextual_entries_by_name,
-            actual_exception=exception_info.value,
+            actual_prompt_evals_base_exception=exception_info.value,
         )
 
-    async def test_RunEvaluation_WhenTheAnswerKeySitsInsideTheInputsDirectory_ThenEvalSuiteDefinitionInvalidExceptionSaysTheTrialCouldReadIt(
+    async def test_RunEvaluation_WhenTheAnswerKeySitsInsideTheInputsDirectory_ThenEvalSuiteFileReferenceValidationExceptionSaysTheTrialCouldReadIt(
         self, tmp_path: Path
     ) -> None:
         # Arrange
@@ -1058,21 +1200,24 @@ class TestRunEvaluationInvalidInput:
         expected_message_phrases: tuple[str, ...] = (
             f"the file '{answer_key_inside_inputs}' is inside the inputs directory of case '{CASE_NAME}', so the trial could read it",
         )
-        expected_contextual_entries_by_name: dict[str, object] = {"DefinitionProblemCount": 1}
+        expected_contextual_entries_by_name: dict[str, object] = {
+            EVAL_SUITE_DIRECTORY_ENTRY_NAME: str(sample_eval_suite.eval_suite_directory),
+            "DefinitionProblemCount": 1,
+        }
 
         # Act
-        with pytest.raises(EvalSuiteDefinitionInvalidException) as exception_info:
+        with pytest.raises(EvalSuiteFileReferenceValidationException) as exception_info:
             await domain_facade.run_evaluation(evaluation_request, ArtifactRecorder().record_evaluation_artifact)
 
         # Assert
         ExceptionAsserter.assert_expected_and_actual_are_equal(
-            expected_exception_type=EvalSuiteDefinitionInvalidException,
+            expected_exception_type=EvalSuiteFileReferenceValidationException,
             expected_message_phrases=expected_message_phrases,
             expected_contextual_entries_by_name=expected_contextual_entries_by_name,
-            actual_exception=exception_info.value,
+            actual_prompt_evals_base_exception=exception_info.value,
         )
 
-    async def test_RunEvaluation_WhenAPromptFileIsNotUtf8_ThenEvalSuiteDefinitionInvalidExceptionNamesTheFile(self, tmp_path: Path) -> None:
+    async def test_RunEvaluation_WhenAPromptFileIsNotUtf8_ThenEvalSuiteFileNotUtf8ExceptionNamesTheFile(self, tmp_path: Path) -> None:
         # Arrange
         sample_eval_suite: SampleEvalSuite = SampleEvalSuiteBuilder.write_sample_eval_suite(tmp_path)
         # Windows PowerShell 5 `Out-File` writes UTF-16 by default.
@@ -1082,18 +1227,108 @@ class TestRunEvaluationInvalidInput:
         )
         evaluation_request: EvaluationRequest = create_evaluation_request(sample_eval_suite, repetitions=1)
         expected_message_phrases: tuple[str, ...] = (f"the file '{BASELINE_PROMPT_FILE}' is not valid utf-8 text",)
-        expected_contextual_entries_by_name: dict[str, object] = {"DefinitionProblemCount": 1}
+        expected_contextual_entries_by_name: dict[str, object] = {
+            EVAL_SUITE_DIRECTORY_ENTRY_NAME: str(sample_eval_suite.eval_suite_directory),
+            "FileName": BASELINE_PROMPT_FILE,
+            "TextEncoding": "utf-8",
+        }
 
         # Act
-        with pytest.raises(EvalSuiteDefinitionInvalidException) as exception_info:
+        with pytest.raises(EvalSuiteFileNotUtf8Exception) as exception_info:
             await domain_facade.run_evaluation(evaluation_request, ArtifactRecorder().record_evaluation_artifact)
 
         # Assert
         ExceptionAsserter.assert_expected_and_actual_are_equal(
-            expected_exception_type=EvalSuiteDefinitionInvalidException,
+            expected_exception_type=EvalSuiteFileNotUtf8Exception,
             expected_message_phrases=expected_message_phrases,
             expected_contextual_entries_by_name=expected_contextual_entries_by_name,
-            actual_exception=exception_info.value,
+            actual_prompt_evals_base_exception=exception_info.value,
+        )
+
+    async def test_RunEvaluation_WhenTheSuiteDefinitionIsNotJson_ThenEvalSuiteFileNotJsonExceptionNamesTheFile(self, tmp_path: Path) -> None:
+        # Arrange
+        sample_eval_suite: SampleEvalSuite = SampleEvalSuiteBuilder.write_sample_eval_suite(tmp_path)
+        invalid_json_text: str = f"{{ {RandomDataGenerator.create_random_word()}"
+        (sample_eval_suite.eval_suite_directory / EVAL_SUITE_DEFINITION_FILE_NAME).write_text(invalid_json_text, encoding="utf-8")
+        domain_facade: DomainFacade = create_domain_facade(
+            TestMediatorCodingAssistantCli(), create_override_by_environment_variable_name(create_random_grader_model_name())
+        )
+        evaluation_request: EvaluationRequest = create_evaluation_request(sample_eval_suite, repetitions=1)
+        expected_json_error: str = describe_json_decode_error(invalid_json_text)
+        expected_message_phrases: tuple[str, ...] = (f"{EVAL_SUITE_DEFINITION_FILE_NAME} is not valid JSON: {expected_json_error}",)
+        expected_contextual_entries_by_name: dict[str, object] = {
+            EVAL_SUITE_DIRECTORY_ENTRY_NAME: str(sample_eval_suite.eval_suite_directory),
+            "FileName": EVAL_SUITE_DEFINITION_FILE_NAME,
+            "JsonError": expected_json_error,
+        }
+
+        # Act
+        with pytest.raises(EvalSuiteFileNotJsonException) as exception_info:
+            await domain_facade.run_evaluation(evaluation_request, ArtifactRecorder().record_evaluation_artifact)
+
+        # Assert
+        ExceptionAsserter.assert_expected_and_actual_are_equal(
+            expected_exception_type=EvalSuiteFileNotJsonException,
+            expected_message_phrases=expected_message_phrases,
+            expected_contextual_entries_by_name=expected_contextual_entries_by_name,
+            actual_prompt_evals_base_exception=exception_info.value,
+        )
+
+    async def test_RunEvaluation_WhenTheSuiteDefinitionHoldsAJsonList_ThenEvalSuiteFileNotJsonObjectExceptionNamesTheFile(
+        self, tmp_path: Path
+    ) -> None:
+        # Arrange
+        sample_eval_suite: SampleEvalSuite = SampleEvalSuiteBuilder.write_sample_eval_suite(tmp_path)
+        (sample_eval_suite.eval_suite_directory / EVAL_SUITE_DEFINITION_FILE_NAME).write_text("[]", encoding="utf-8")
+        domain_facade: DomainFacade = create_domain_facade(
+            TestMediatorCodingAssistantCli(), create_override_by_environment_variable_name(create_random_grader_model_name())
+        )
+        evaluation_request: EvaluationRequest = create_evaluation_request(sample_eval_suite, repetitions=1)
+        expected_message_phrases: tuple[str, ...] = (f"{EVAL_SUITE_DEFINITION_FILE_NAME} must contain a JSON object; it holds list",)
+        expected_contextual_entries_by_name: dict[str, object] = {
+            EVAL_SUITE_DIRECTORY_ENTRY_NAME: str(sample_eval_suite.eval_suite_directory),
+            "FileName": EVAL_SUITE_DEFINITION_FILE_NAME,
+            "HeldType": "list",
+        }
+
+        # Act
+        with pytest.raises(EvalSuiteFileNotJsonObjectException) as exception_info:
+            await domain_facade.run_evaluation(evaluation_request, ArtifactRecorder().record_evaluation_artifact)
+
+        # Assert
+        ExceptionAsserter.assert_expected_and_actual_are_equal(
+            expected_exception_type=EvalSuiteFileNotJsonObjectException,
+            expected_message_phrases=expected_message_phrases,
+            expected_contextual_entries_by_name=expected_contextual_entries_by_name,
+            actual_prompt_evals_base_exception=exception_info.value,
+        )
+
+    async def test_RunEvaluation_WhenACaseInputsDirectoryIsEmpty_ThenEvalSuiteCaseInputsEmptyExceptionNamesTheCase(self, tmp_path: Path) -> None:
+        # Arrange
+        sample_eval_suite: SampleEvalSuite = SampleEvalSuiteBuilder.write_sample_eval_suite(tmp_path)
+        for input_path in (sample_eval_suite.eval_suite_directory / CASE_INPUTS_DIRECTORY).iterdir():
+            input_path.unlink()
+        domain_facade: DomainFacade = create_domain_facade(
+            TestMediatorCodingAssistantCli(), create_override_by_environment_variable_name(create_random_grader_model_name())
+        )
+        evaluation_request: EvaluationRequest = create_evaluation_request(sample_eval_suite, repetitions=1)
+        expected_message_phrases: tuple[str, ...] = (f"case '{CASE_NAME}' has no files in '{CASE_INPUTS_DIRECTORY}'",)
+        expected_contextual_entries_by_name: dict[str, object] = {
+            EVAL_SUITE_DIRECTORY_ENTRY_NAME: str(sample_eval_suite.eval_suite_directory),
+            "CaseName": CASE_NAME,
+            "InputsDirectory": CASE_INPUTS_DIRECTORY,
+        }
+
+        # Act
+        with pytest.raises(EvalSuiteCaseInputsEmptyException) as exception_info:
+            await domain_facade.run_evaluation(evaluation_request, ArtifactRecorder().record_evaluation_artifact)
+
+        # Assert
+        ExceptionAsserter.assert_expected_and_actual_are_equal(
+            expected_exception_type=EvalSuiteCaseInputsEmptyException,
+            expected_message_phrases=expected_message_phrases,
+            expected_contextual_entries_by_name=expected_contextual_entries_by_name,
+            actual_prompt_evals_base_exception=exception_info.value,
         )
 
 
@@ -1171,13 +1406,13 @@ class TestRenderScorecardReportInvalidInput:
             expected_exception_type=ScorecardValidationException,
             expected_message_phrases=expected_message_phrases,
             expected_contextual_entries_by_name=expected_contextual_entries_by_name,
-            actual_exception=exception_info.value,
+            actual_prompt_evals_base_exception=exception_info.value,
         )
 
 
 @pytest.mark.acceptance
 class TestDomainFacadeInvalidConfiguration:
-    def test_DomainFacade_WhenAStringSettingIsSetToBlank_ThenConfigurationSettingExceptionNamesTheSetting(self) -> None:
+    def test_DomainFacade_WhenAStringSettingIsSetToBlank_ThenConfigurationSettingBlankExceptionNamesTheSetting(self) -> None:
         # Arrange
         blank_setting_value: str = "  "
         override_by_environment_variable_name: dict[str, str] = create_override_by_environment_variable_name(create_random_grader_model_name())
@@ -1192,13 +1427,66 @@ class TestDomainFacadeInvalidConfiguration:
         }
 
         # Act
-        with pytest.raises(ConfigurationSettingException) as exception_info:
+        with pytest.raises(ConfigurationSettingBlankException) as exception_info:
             DomainFacade(service_locator_testing)
 
         # Assert
         ExceptionAsserter.assert_expected_and_actual_are_equal(
-            expected_exception_type=ConfigurationSettingException,
+            expected_exception_type=ConfigurationSettingBlankException,
             expected_message_phrases=expected_message_phrases,
             expected_contextual_entries_by_name=expected_contextual_entries_by_name,
-            actual_exception=exception_info.value,
+            actual_prompt_evals_base_exception=exception_info.value,
+        )
+
+    @pytest.mark.parametrize(
+        ("environment_variable_name", "configured_value", "expected_exception_type", "expected_expectation"),
+        [
+            (SESSION_TIMEOUT_SECONDS_VARIABLE, "soon", ConfigurationSettingNotNumberException, "expected a number of seconds"),
+            (SESSION_TIMEOUT_SECONDS_VARIABLE, "inf", ConfigurationSettingNumberOutOfRangeException, "expected a finite number greater than zero"),
+            (MAXIMUM_CONCURRENT_GRADINGS_VARIABLE, "three", ConfigurationSettingNotWholeNumberException, "expected a whole number"),
+            (MAXIMUM_CONCURRENT_TRIALS_VARIABLE, "0", ConfigurationSettingWholeNumberOutOfRangeException, "expected a whole number of at least 1"),
+            (
+                GRADER_EFFORT_VARIABLE,
+                "extreme",
+                ConfigurationSettingUnknownEffortLevelException,
+                f"expected one of {', '.join(effort_level.value for effort_level in EffortLevel)}",
+            ),
+            (
+                GRADER_ASSISTANT_VARIABLE,
+                "gemini",
+                ConfigurationSettingUnknownCodingAssistantException,
+                f"expected one of {', '.join(coding_assistant.value for coding_assistant in CodingAssistant)}",
+            ),
+        ],
+        ids=["timeout-not-a-number", "timeout-not-finite", "gradings-not-whole", "trials-below-one", "unknown-effort", "unknown-assistant"],
+    )
+    def test_DomainFacade_WhenASettingCannotBeRead_ThenTheExceptionForThatFailureNamesTheSetting(
+        self,
+        environment_variable_name: str,
+        configured_value: str,
+        expected_exception_type: type[ConfigurationSettingBaseException],
+        expected_expectation: str,
+    ) -> None:
+        # Arrange
+        override_by_environment_variable_name: dict[str, str] = create_override_by_environment_variable_name(create_random_grader_model_name())
+        override_by_environment_variable_name[environment_variable_name] = configured_value
+        service_locator_testing: ServiceLocatorTesting = ServiceLocatorTesting(
+            TestMediatorCodingAssistantCli(), override_by_environment_variable_name
+        )
+        expected_message_phrases: tuple[str, ...] = (f"{environment_variable_name}='{configured_value}'", expected_expectation)
+        expected_contextual_entries_by_name: dict[str, object] = {
+            "EnvironmentVariableName": environment_variable_name,
+            "ConfiguredValue": configured_value,
+        }
+
+        # Act
+        with pytest.raises(ConfigurationSettingBaseException) as exception_info:
+            DomainFacade(service_locator_testing)
+
+        # Assert
+        ExceptionAsserter.assert_expected_and_actual_are_equal(
+            expected_exception_type=expected_exception_type,
+            expected_message_phrases=expected_message_phrases,
+            expected_contextual_entries_by_name=expected_contextual_entries_by_name,
+            actual_prompt_evals_base_exception=exception_info.value,
         )

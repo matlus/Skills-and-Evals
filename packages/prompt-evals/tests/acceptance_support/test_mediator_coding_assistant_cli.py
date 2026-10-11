@@ -4,12 +4,17 @@ from typing import Final
 
 from acceptance_support.claude_event_stream_builder import ClaudeEventStreamBuilder
 from acceptance_support.codex_event_stream_builder import CodexEventStreamBuilder
+from acceptance_support.random_data_generator import RandomDataGenerator
 from acceptance_support.scripted_cli_sessions import (
+    ScriptedAnswerSession,
+    ScriptedClaudeEventStreamSession,
     ScriptedCliSession,
-    ScriptedEventStreamSession,
+    ScriptedCodexEventStreamSession,
     ScriptedFailedStartSession,
     ScriptedRawOutputSession,
+    ScriptedTimedOutSession,
 )
+from prompt_evals.managers.exceptions.process_runner_exceptions import ProcessTimedOutException
 from prompt_evals.managers.gateways.process_runners.process_runner_models import ProcessInvocation, ProcessOutcome
 
 # The executables the tests configure (PROMPT_EVALS_CLAUDE_EXECUTABLE, PROMPT_EVALS_CODEX_EXECUTABLE); the launched one
@@ -18,6 +23,7 @@ CLAUDE_EXECUTABLE_PATH: Final[str] = "claude"
 CODEX_EXECUTABLE_PATH: Final[str] = "codex"
 CLAUDE_MODEL_ARGUMENT: Final[str] = "--model"
 CODEX_OUTPUT_SCHEMA_ARGUMENT: Final[str] = "--output-schema"
+SUCCESSFUL_EXIT_CODE: Final[int] = 0
 
 
 @dataclass(frozen=True)
@@ -78,16 +84,31 @@ class TestMediatorCodingAssistantCli:
         match scripted_cli_session:
             case ScriptedFailedStartSession(raised_exception=raised_exception):
                 raise raised_exception
+            case ScriptedTimedOutSession():
+                raise ProcessTimedOutException(RandomDataGenerator.create_random_process_id(), process_invocation.timeout_seconds, TimeoutError())
             case ScriptedRawOutputSession():
                 return ProcessOutcome(
                     exit_code=scripted_cli_session.exit_code,
                     standard_output_text=scripted_cli_session.raw_standard_output_text,
                     standard_error_text=scripted_cli_session.standard_error_text,
                 )
-            case ScriptedEventStreamSession():
+            case ScriptedAnswerSession():
+                return ProcessOutcome(
+                    exit_code=SUCCESSFUL_EXIT_CODE,
+                    standard_output_text=self._build_answer_event_stream(process_invocation.command_arguments, scripted_cli_session),
+                    standard_error_text="",
+                )
+            case ScriptedClaudeEventStreamSession():
                 return ProcessOutcome(
                     exit_code=scripted_cli_session.exit_code,
-                    standard_output_text=self._build_event_stream(process_invocation.command_arguments, scripted_cli_session),
+                    standard_output_text=self._build_claude_event_stream(process_invocation.command_arguments, scripted_cli_session),
+                    standard_error_text=scripted_cli_session.standard_error_text,
+                )
+            case ScriptedCodexEventStreamSession():
+                self._require_launched_executable(process_invocation.command_arguments, CODEX_EXECUTABLE_PATH, scripted_cli_session)
+                return ProcessOutcome(
+                    exit_code=scripted_cli_session.exit_code,
+                    standard_output_text=CodexEventStreamBuilder.build_event_stream(scripted_cli_session),
                     standard_error_text=scripted_cli_session.standard_error_text,
                 )
 
@@ -118,14 +139,38 @@ class TestMediatorCodingAssistantCli:
         return output_schema_file.read_text(encoding="utf-8")
 
     @staticmethod
-    def _build_event_stream(command_arguments: tuple[str, ...], scripted_event_stream_session: ScriptedEventStreamSession) -> str:
+    def _build_answer_event_stream(command_arguments: tuple[str, ...], scripted_answer_session: ScriptedAnswerSession) -> str:
         executable_path: str = command_arguments[0]
         if executable_path == CLAUDE_EXECUTABLE_PATH:
-            requested_model_name: str = command_arguments[command_arguments.index(CLAUDE_MODEL_ARGUMENT) + 1]
-            return ClaudeEventStreamBuilder.build_event_stream(requested_model_name, scripted_event_stream_session)
+            return TestMediatorCodingAssistantCli._build_claude_event_stream(
+                command_arguments,
+                ScriptedClaudeEventStreamSession(
+                    final_text=scripted_answer_session.final_text, structured_output=scripted_answer_session.structured_output
+                ),
+            )
         if executable_path == CODEX_EXECUTABLE_PATH:
-            return CodexEventStreamBuilder.build_event_stream(scripted_event_stream_session)
+            return CodexEventStreamBuilder.build_event_stream(
+                ScriptedCodexEventStreamSession(
+                    final_text=scripted_answer_session.final_text, structured_output=scripted_answer_session.structured_output
+                )
+            )
         raise AssertionError(f"The test launched an executable the mediator does not script: {executable_path!r}")
+
+    @staticmethod
+    def _build_claude_event_stream(command_arguments: tuple[str, ...], scripted_claude_event_stream_session: ScriptedClaudeEventStreamSession) -> str:
+        TestMediatorCodingAssistantCli._require_launched_executable(command_arguments, CLAUDE_EXECUTABLE_PATH, scripted_claude_event_stream_session)
+        requested_model_name: str = command_arguments[command_arguments.index(CLAUDE_MODEL_ARGUMENT) + 1]
+        return ClaudeEventStreamBuilder.build_event_stream(requested_model_name, scripted_claude_event_stream_session)
+
+    @staticmethod
+    def _require_launched_executable(
+        command_arguments: tuple[str, ...], expected_executable_path: str, scripted_cli_session: ScriptedCliSession
+    ) -> None:
+        if command_arguments[0] != expected_executable_path:
+            raise AssertionError(
+                f"The test scripted a {type(scripted_cli_session).__name__} for a session that launched {command_arguments[0]!r}, "
+                f"not {expected_executable_path!r}"
+            )
 
     def _take_scripted_session(self, prompt_text: str) -> ScriptedCliSession:
         for scripted_response in self._scripted_responses:

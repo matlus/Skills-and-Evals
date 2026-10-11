@@ -25,7 +25,7 @@ from acceptance_support.sample_reference_ledger_builder import (
     SampleReferenceLedger,
     SampleReferenceLedgerBuilder,
 )
-from acceptance_support.scripted_cli_sessions import ScriptedClaudeToolCall, ScriptedEventStreamSession
+from acceptance_support.scripted_cli_sessions import ScriptedAnswerSession, ScriptedClaudeEventStreamSession, ScriptedClaudeToolCall
 from acceptance_support.scripted_grader_sessions import (
     FACT_EXTRACTION_PROMPT_HEADING,
     JUDGMENT_PROMPT_HEADING,
@@ -40,7 +40,9 @@ from prompt_evals import (
     CodingAssistant,
     DomainFacade,
     EffortLevel,
-    EvalSuiteDefinitionInvalidException,
+    EvalSuiteFileReferenceValidationException,
+    EvalSuiteFileValidationException,
+    EvalSuiteValidationException,
     EvaluationArtifact,
     EvaluationArtifactType,
     EvaluationRequest,
@@ -52,6 +54,7 @@ CANDIDATE_PROMPT_MARKER: Final[str] = "Candidate prompt."
 GRADER_MODEL_VARIABLE: Final[str] = "PROMPT_EVALS_GRADER_MODEL"
 EVAL_SUITE_DEFINITION_FILE_NAME: Final[str] = "eval_suite.json"
 DEFINITION_PROBLEM_COUNT_ENTRY_NAME: Final[str] = "DefinitionProblemCount"
+EVAL_SUITE_DIRECTORY_ENTRY_NAME: Final[str] = "EvalSuiteDirectory"
 
 type JsonObject = dict[str, object]
 
@@ -87,10 +90,10 @@ class TrialGradeDocument:
     check_outcomes: tuple[CheckOutcomeDocument, ...]
 
 
-def create_trial_session(answer_text: str) -> ScriptedEventStreamSession:
-    return ScriptedEventStreamSession(
+def create_trial_session(answer_text: str) -> ScriptedClaudeEventStreamSession:
+    return ScriptedClaudeEventStreamSession(
         final_text=answer_text,
-        scripted_tool_calls=(
+        scripted_claude_tool_calls=(
             ScriptedClaudeToolCall(
                 tool_name="Bash", tool_input={"command": "python totals.py"}, tool_result_text=RandomDataGenerator.create_random_word()
             ),
@@ -155,13 +158,61 @@ def read_first_trial_grade_document(artifact_recorder: ArtifactRecorder) -> Tria
 
 
 def retrieve_check_outcome_document(trial_grade_document: TrialGradeDocument, check_name: str) -> CheckOutcomeDocument:
-    return next(
-        check_outcome_document for check_outcome_document in trial_grade_document.check_outcomes if check_outcome_document.check_name == check_name
+    check_outcome_document: CheckOutcomeDocument | None = next(
+        (
+            recorded_check_outcome_document
+            for recorded_check_outcome_document in trial_grade_document.check_outcomes
+            if recorded_check_outcome_document.check_name == check_name
+        ),
+        None,
     )
+    recorded_check_names: list[str] = [
+        recorded_check_outcome_document.check_name for recorded_check_outcome_document in trial_grade_document.check_outcomes
+    ]
+    assert check_outcome_document is not None, (
+        f"the first trial's grade artifact must record an outcome for the check '{check_name}'; it records outcomes for {recorded_check_names}"
+    )
+    return check_outcome_document
+
+
+def describe_amount_diagnosis_differences(
+    expected_amount_diagnosis_documents: tuple[AmountDiagnosisDocument, ...], actual_amount_diagnosis_documents: tuple[AmountDiagnosisDocument, ...]
+) -> str:
+    differences: list[str] = []
+    diagnosis_index: int
+    for diagnosis_index in range(max(len(expected_amount_diagnosis_documents), len(actual_amount_diagnosis_documents))):
+        diagnosis_number: int = diagnosis_index + 1
+        if diagnosis_index >= len(actual_amount_diagnosis_documents):
+            differences.append(f"diagnosis {diagnosis_number} is missing; expected {expected_amount_diagnosis_documents[diagnosis_index]}")
+        elif diagnosis_index >= len(expected_amount_diagnosis_documents):
+            differences.append(f"diagnosis {diagnosis_number} is unexpected; actual {actual_amount_diagnosis_documents[diagnosis_index]}")
+        else:
+            differences.extend(
+                describe_amount_diagnosis_field_differences(
+                    diagnosis_number, expected_amount_diagnosis_documents[diagnosis_index], actual_amount_diagnosis_documents[diagnosis_index]
+                )
+            )
+    return "; ".join(differences)
+
+
+def describe_amount_diagnosis_field_differences(
+    diagnosis_number: int, expected_amount_diagnosis_document: AmountDiagnosisDocument, actual_amount_diagnosis_document: AmountDiagnosisDocument
+) -> list[str]:
+    field_values_by_field_name: dict[str, tuple[object, object]] = {
+        "category": (expected_amount_diagnosis_document.category, actual_amount_diagnosis_document.category),
+        "period": (expected_amount_diagnosis_document.period, actual_amount_diagnosis_document.period),
+        "reported_amount": (expected_amount_diagnosis_document.reported_amount, actual_amount_diagnosis_document.reported_amount),
+        "reference_amount": (expected_amount_diagnosis_document.reference_amount, actual_amount_diagnosis_document.reference_amount),
+        "explanations": (expected_amount_diagnosis_document.explanations, actual_amount_diagnosis_document.explanations),
+    }
+    return [
+        f"diagnosis {diagnosis_number} '{field_name}': expected {expected_field_value!r}; actual {actual_field_value!r}"
+        for field_name, (expected_field_value, actual_field_value) in field_values_by_field_name.items()
+        if expected_field_value != actual_field_value
+    ]
 
 
 def move_reference_ledger_into_inputs(eval_suite_directory: Path) -> str:
-    """Copies the ledger into the case's inputs directory and points the case at that copy; returns the copy's suite-relative path."""
     eval_suite_definition: JsonObject = cast(
         JsonObject, json.loads((eval_suite_directory / EVAL_SUITE_DEFINITION_FILE_NAME).read_text(encoding="utf-8"))
     )
@@ -267,7 +318,7 @@ class TestRunEvaluationFailureDiagnosis:
         assert actual_amount_diagnosis_documents == expected_amount_diagnosis_documents, (
             f"the {TOTAL_AMOUNT_CHECK_NAME} outcome in the first trial's grade artifact must record one diagnosis naming "
             f"{describe_entry(included_sample_ledger_entry)} as wrongly included; "
-            f"expected {expected_amount_diagnosis_documents}; actual {actual_amount_diagnosis_documents}"
+            + describe_amount_diagnosis_differences(expected_amount_diagnosis_documents, actual_amount_diagnosis_documents)
         )
 
     async def test_RunEvaluation_WhenTheJudgeDisputesAnAmountThatIsALedgerTotal_ThenTheJudgeCheckFailureNamesTheMistakenEntry(
@@ -362,7 +413,7 @@ class TestRunEvaluationFailureDiagnosis:
         )
         test_mediator_coding_assistant_cli.script_sessions(
             (JUDGMENT_PROMPT_HEADING,),
-            ScriptedEventStreamSession(structured_output={"passed": False, "reason": RandomDataGenerator.create_random_sentence()}),
+            ScriptedAnswerSession(structured_output={"passed": False, "reason": RandomDataGenerator.create_random_sentence()}),
         )
         expected_rows: list[ExpectedScorecardRow] = create_expected_rows_for_every_check(CANDIDATE_VARIANT_NAME, trial_count=1, passed_count=1)
         expected_rows[3] = ExpectedScorecardRow(
@@ -387,7 +438,7 @@ class TestRunEvaluationFailureDiagnosis:
 
 @pytest.mark.acceptance
 class TestRunEvaluationReferenceLedgerInvalidInput:
-    async def test_RunEvaluation_WhenTheLedgerTotalDisagreesWithTheExpectedFact_ThenEvalSuiteDefinitionInvalidExceptionNamesTheFact(
+    async def test_RunEvaluation_WhenTheLedgerTotalDisagreesWithTheExpectedFact_ThenEvalSuiteValidationExceptionNamesTheFact(
         self, tmp_path: Path
     ) -> None:
         # Arrange
@@ -402,20 +453,23 @@ class TestRunEvaluationReferenceLedgerInvalidInput:
             f"the reference ledger totals it as {sample_reference_ledger.total_amount}",
         )
         # Both phrases describe the one disagreement between the expected fact and the ledger total.
-        expected_contextual_entries_by_name: dict[str, object] = {DEFINITION_PROBLEM_COUNT_ENTRY_NAME: 1}
+        expected_contextual_entries_by_name: dict[str, object] = {
+            EVAL_SUITE_DIRECTORY_ENTRY_NAME: str(sample_eval_suite.eval_suite_directory),
+            DEFINITION_PROBLEM_COUNT_ENTRY_NAME: 1,
+        }
 
         # Act
-        with pytest.raises(EvalSuiteDefinitionInvalidException) as exception_info:
+        with pytest.raises(EvalSuiteValidationException) as exception_info:
             await create_domain_facade_for(TestMediatorCodingAssistantCli()).run_evaluation(
                 create_candidate_evaluation_request(sample_eval_suite, repetitions=1), ArtifactRecorder().record_evaluation_artifact
             )
 
         # Assert
         ExceptionAsserter.assert_expected_and_actual_are_equal(
-            expected_exception_type=EvalSuiteDefinitionInvalidException,
+            expected_exception_type=EvalSuiteValidationException,
             expected_message_phrases=expected_message_phrases,
             expected_contextual_entries_by_name=expected_contextual_entries_by_name,
-            actual_exception=exception_info.value,
+            actual_prompt_evals_base_exception=exception_info.value,
         )
 
     async def test_RunEvaluation_WhenLedgerEntriesAreMalformed_ThenEveryEntryProblemIsReportedTogether(self, tmp_path: Path) -> None:
@@ -449,23 +503,26 @@ class TestRunEvaluationReferenceLedgerInvalidInput:
             "needs a 'policy_name' exactly when it lists alternative_categories",
             "needs a boolean 'is_counted'",
         )
-        expected_contextual_entries_by_name: dict[str, object] = {DEFINITION_PROBLEM_COUNT_ENTRY_NAME: len(expected_message_phrases)}
+        expected_contextual_entries_by_name: dict[str, object] = {
+            EVAL_SUITE_DIRECTORY_ENTRY_NAME: str(sample_eval_suite.eval_suite_directory),
+            DEFINITION_PROBLEM_COUNT_ENTRY_NAME: len(expected_message_phrases),
+        }
 
         # Act
-        with pytest.raises(EvalSuiteDefinitionInvalidException) as exception_info:
+        with pytest.raises(EvalSuiteFileValidationException) as exception_info:
             await create_domain_facade_for(TestMediatorCodingAssistantCli()).run_evaluation(
                 create_candidate_evaluation_request(sample_eval_suite, repetitions=1), ArtifactRecorder().record_evaluation_artifact
             )
 
         # Assert
         ExceptionAsserter.assert_expected_and_actual_are_equal(
-            expected_exception_type=EvalSuiteDefinitionInvalidException,
+            expected_exception_type=EvalSuiteFileValidationException,
             expected_message_phrases=expected_message_phrases,
             expected_contextual_entries_by_name=expected_contextual_entries_by_name,
-            actual_exception=exception_info.value,
+            actual_prompt_evals_base_exception=exception_info.value,
         )
 
-    async def test_RunEvaluation_WhenTheLedgerSitsInsideTheInputsDirectory_ThenEvalSuiteDefinitionInvalidExceptionSaysTheTrialCouldReadIt(
+    async def test_RunEvaluation_WhenTheLedgerSitsInsideTheInputsDirectory_ThenEvalSuiteFileReferenceValidationExceptionSaysTheTrialCouldReadIt(
         self, tmp_path: Path
     ) -> None:
         # Arrange
@@ -474,18 +531,21 @@ class TestRunEvaluationReferenceLedgerInvalidInput:
         ledger_inside_inputs: str = move_reference_ledger_into_inputs(sample_eval_suite.eval_suite_directory)
         expected_message_phrases: tuple[str, ...] = (f"the file '{ledger_inside_inputs}' is inside the inputs directory", "the trial could read it")
         # Both phrases describe the one ledger file placed inside the one case's inputs directory.
-        expected_contextual_entries_by_name: dict[str, object] = {DEFINITION_PROBLEM_COUNT_ENTRY_NAME: 1}
+        expected_contextual_entries_by_name: dict[str, object] = {
+            EVAL_SUITE_DIRECTORY_ENTRY_NAME: str(sample_eval_suite.eval_suite_directory),
+            DEFINITION_PROBLEM_COUNT_ENTRY_NAME: 1,
+        }
 
         # Act
-        with pytest.raises(EvalSuiteDefinitionInvalidException) as exception_info:
+        with pytest.raises(EvalSuiteFileReferenceValidationException) as exception_info:
             await create_domain_facade_for(TestMediatorCodingAssistantCli()).run_evaluation(
                 create_candidate_evaluation_request(sample_eval_suite, repetitions=1), ArtifactRecorder().record_evaluation_artifact
             )
 
         # Assert
         ExceptionAsserter.assert_expected_and_actual_are_equal(
-            expected_exception_type=EvalSuiteDefinitionInvalidException,
+            expected_exception_type=EvalSuiteFileReferenceValidationException,
             expected_message_phrases=expected_message_phrases,
             expected_contextual_entries_by_name=expected_contextual_entries_by_name,
-            actual_exception=exception_info.value,
+            actual_prompt_evals_base_exception=exception_info.value,
         )

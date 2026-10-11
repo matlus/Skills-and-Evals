@@ -1,7 +1,16 @@
 import json
-from typing import NoReturn, cast, final
+from typing import cast, final
 
-from prompt_evals.managers.exceptions.grading_exceptions import GraderResponseInvalidException
+from prompt_evals.managers.exceptions.grading_exceptions import (
+    GraderResponseDisputedAmountFieldsInvalidException,
+    GraderResponseDisputedAmountNotObjectException,
+    GraderResponseDisputedAmountsNotListException,
+    GraderResponseFactNotScalarException,
+    GraderResponseMissingException,
+    GraderResponseNotJsonException,
+    GraderResponseNotJsonObjectException,
+    GraderResponseVerdictFieldsInvalidException,
+)
 from prompt_evals.managers.models.diagnosis_models import DisputedAmount
 from prompt_evals.managers.models.grading_models import ExtractedFact, ExtractedFacts, JudgeVerdict
 
@@ -33,7 +42,7 @@ class ValidatorGraderResponseResource:
         is_passed: object = structured_output.get("passed")
         reason: object = structured_output.get("reason")
         if not isinstance(is_passed, bool) or not isinstance(reason, str):
-            ValidatorGraderResponseResource._raise_invalid(processor_name, "the verdict needs a boolean 'passed' and a string 'reason'")
+            raise GraderResponseVerdictFieldsInvalidException(processor_name, type(is_passed).__name__, type(reason).__name__)
         return JudgeVerdict(
             is_passed=is_passed,
             reason=reason,
@@ -43,7 +52,7 @@ class ValidatorGraderResponseResource:
     @staticmethod
     def _parse_disputed_amounts(disputed_amounts_value: object, processor_name: str) -> tuple[DisputedAmount, ...]:
         if not isinstance(disputed_amounts_value, list):
-            ValidatorGraderResponseResource._raise_invalid(processor_name, "the verdict needs a list 'disputed_amounts'")
+            raise GraderResponseDisputedAmountsNotListException(processor_name, type(disputed_amounts_value).__name__)
         return tuple(
             ValidatorGraderResponseResource._parse_disputed_amount(disputed_amount_value, processor_name)
             for disputed_amount_value in cast(list[object], disputed_amounts_value)
@@ -52,14 +61,14 @@ class ValidatorGraderResponseResource:
     @staticmethod
     def _parse_disputed_amount(disputed_amount_value: object, processor_name: str) -> DisputedAmount:
         if not isinstance(disputed_amount_value, dict):
-            ValidatorGraderResponseResource._raise_invalid(processor_name, "each disputed amount must be an object")
+            raise GraderResponseDisputedAmountNotObjectException(processor_name, type(disputed_amount_value).__name__)
         disputed_amount_object: JsonObject = cast(JsonObject, disputed_amount_value)
         description: object = disputed_amount_object.get("description")
         answer_amount: object = disputed_amount_object.get("answer_amount")
         reference_amount: object = disputed_amount_object.get("reference_amount")
         if not isinstance(description, str) or not isinstance(answer_amount, str) or not isinstance(reference_amount, str):
-            ValidatorGraderResponseResource._raise_invalid(
-                processor_name, "each disputed amount needs string 'description', 'answer_amount' and 'reference_amount'"
+            raise GraderResponseDisputedAmountFieldsInvalidException(
+                processor_name, type(description).__name__, type(answer_amount).__name__, type(reference_amount).__name__
             )
         return DisputedAmount(description=description, answer_amount_text=answer_amount, reference_amount_text=reference_amount)
 
@@ -73,20 +82,16 @@ class ValidatorGraderResponseResource:
             case str() | int() | float():
                 return str(fact_value)
             case _:
-                raise GraderResponseInvalidException(processor_name, f"fact '{fact_name}' has a non-scalar value")
+                raise GraderResponseFactNotScalarException(processor_name, fact_name, type(fact_value).__name__)
 
     @staticmethod
     def _parse_json_object(structured_output_json: str | None, processor_name: str) -> JsonObject:
         if structured_output_json is None:
-            ValidatorGraderResponseResource._raise_invalid(processor_name, "the session returned no structured output")
+            raise GraderResponseMissingException(processor_name)
         try:
             structured_output: object = json.loads(structured_output_json)
         except json.JSONDecodeError as json_decode_error:
-            raise GraderResponseInvalidException(processor_name, f"the structured output is not JSON: {json_decode_error}") from json_decode_error
+            raise GraderResponseNotJsonException(processor_name, str(json_decode_error)) from json_decode_error
         if not isinstance(structured_output, dict):
-            ValidatorGraderResponseResource._raise_invalid(processor_name, "the structured output is not a JSON object")
+            raise GraderResponseNotJsonObjectException(processor_name, type(structured_output).__name__)
         return cast(JsonObject, structured_output)
-
-    @staticmethod
-    def _raise_invalid(processor_name: str, invalidity_description: str) -> NoReturn:
-        raise GraderResponseInvalidException(processor_name, invalidity_description)

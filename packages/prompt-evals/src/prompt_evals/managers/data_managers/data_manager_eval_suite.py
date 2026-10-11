@@ -5,6 +5,7 @@ from typing import Final, final
 
 from prompt_evals.managers.data_managers.eval_suite_resources.eval_suite_resources import (
     AmountCheckResource,
+    AmountFactLedgerBucketResource,
     CaseResource,
     CheckResource,
     EvalSuiteResource,
@@ -17,7 +18,12 @@ from prompt_evals.managers.data_managers.eval_suite_resources.eval_suite_resourc
 from prompt_evals.managers.data_managers.eval_suite_resources.validator_eval_suite import ValidatorEvalSuite
 from prompt_evals.managers.data_managers.eval_suite_resources.validator_eval_suite_resource import ValidatorEvalSuiteResource
 from prompt_evals.managers.data_managers.processors.reference_ledger_totals_processor import ReferenceLedgerTotalsProcessor
-from prompt_evals.managers.exceptions.eval_suite_exceptions import EvalSuiteDefinitionInvalidException, EvalSuiteNotFoundException
+from prompt_evals.managers.exceptions.eval_suite_exceptions import (
+    EvalSuiteCaseInputsEmptyException,
+    EvalSuiteFileNotUtf8Exception,
+    EvalSuiteFileReferenceValidationException,
+    EvalSuiteNotFoundException,
+)
 from prompt_evals.managers.models.eval_suite_models import (
     AmountCheckDefinition,
     CheckDefinition,
@@ -106,14 +112,16 @@ class DataManagerEvalSuite:
         return ReferenceLedgerTotalsProcessor.total_reference_ledger(
             tuple(self._map_ledger_entry(ledger_entry_resource) for ledger_entry_resource in reference_ledger_resource.ledger_entry_resources),
             tuple(
-                AmountFactLedgerBucket(
-                    fact_name=amount_fact_ledger_bucket_resource.fact_name,
-                    ledger_bucket=LedgerBucket(
-                        category=amount_fact_ledger_bucket_resource.category, period=amount_fact_ledger_bucket_resource.period
-                    ),
-                )
+                self._map_amount_fact_ledger_bucket(amount_fact_ledger_bucket_resource)
                 for amount_fact_ledger_bucket_resource in reference_ledger_resource.amount_fact_ledger_bucket_resources
             ),
+        )
+
+    @staticmethod
+    def _map_amount_fact_ledger_bucket(amount_fact_ledger_bucket_resource: AmountFactLedgerBucketResource) -> AmountFactLedgerBucket:
+        return AmountFactLedgerBucket(
+            fact_name=amount_fact_ledger_bucket_resource.fact_name,
+            ledger_bucket=LedgerBucket(category=amount_fact_ledger_bucket_resource.category, period=amount_fact_ledger_bucket_resource.period),
         )
 
     @staticmethod
@@ -152,9 +160,7 @@ class DataManagerEvalSuite:
             if input_path.is_file()
         )
         if not input_files:
-            raise EvalSuiteDefinitionInvalidException(
-                eval_suite_directory, [f"case '{case_resource.case_name}' has no files in '{case_resource.inputs_directory}'"]
-            )
+            raise EvalSuiteCaseInputsEmptyException(eval_suite_directory, case_resource.case_name, case_resource.inputs_directory)
         return input_files
 
     def _map_check_definition(self, check_resource: CheckResource, eval_suite_directory: Path) -> CheckDefinition:
@@ -198,7 +204,7 @@ class DataManagerEvalSuite:
             *DataManagerEvalSuite._find_referenced_files_inside_inputs(eval_suite_resource, eval_suite_directory, referenced_file_names),
         ]
         if definition_problems:
-            raise EvalSuiteDefinitionInvalidException(eval_suite_directory, definition_problems)
+            raise EvalSuiteFileReferenceValidationException(eval_suite_directory, definition_problems)
 
     @staticmethod
     def _collect_referenced_file_names(eval_suite_resource: EvalSuiteResource) -> tuple[str, ...]:
@@ -250,6 +256,4 @@ class DataManagerEvalSuite:
         try:
             return (eval_suite_directory / relative_file_name).read_text(encoding=TEXT_ENCODING)
         except UnicodeDecodeError as unicode_decode_error:
-            raise EvalSuiteDefinitionInvalidException(
-                eval_suite_directory, [f"the file '{relative_file_name}' is not valid {TEXT_ENCODING} text"]
-            ) from unicode_decode_error
+            raise EvalSuiteFileNotUtf8Exception(eval_suite_directory, relative_file_name, TEXT_ENCODING) from unicode_decode_error
