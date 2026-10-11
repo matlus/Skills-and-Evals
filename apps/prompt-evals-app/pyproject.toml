@@ -19,6 +19,7 @@ prompt-evals = { workspace = true }
 
 [project.scripts]
 prompt_evals_app = "prompt_evals_app.main:main"
+prompt_evals_compare = "prompt_evals_app.comparison_main:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -50,6 +50,8 @@ class ScriptedEventStreamSession:
     result_subtype: str | None = None
     # The causes an error lists: Claude Code's result "errors" field, or the provider messages of Codex's failed turn.
     error_messages: tuple[str, ...] = ()
+    # Claude Code only: the session duration its result event reports.
+    duration_milliseconds: int = 1234
 
 
 @dataclass(frozen=True)

@@ -1,3 +1,4 @@
+import math
 from collections import Counter
 from typing import Final, final
 
@@ -39,6 +40,7 @@ class ValidatorEvaluationRequest:
             *ValidatorEvaluationRequest._find_model_name_problems(regrade_request.model_name),
             *ValidatorEvaluationRequest._find_recorded_trials_presence_problems(regrade_request),
             *ValidatorEvaluationRequest._find_duplicate_recorded_trial_problems(regrade_request),
+            *ValidatorEvaluationRequest._find_recorded_answer_duration_problems(regrade_request),
         ]
         if validation_problems:
             raise EvaluationRequestValidationException(validation_problems)
@@ -98,6 +100,22 @@ class ValidatorEvaluationRequest:
                 )
                 duplicate_recorded_trial_problems.append(duplicate_recorded_trial_problem)
         return duplicate_recorded_trial_problems
+
+    @staticmethod
+    def _find_recorded_answer_duration_problems(regrade_request: RegradeRequest) -> list[str]:
+        # NaN fails the comparison; infinity and negatives are not durations.
+        return [
+            ValidatorEvaluationRequest._describe_recorded_answer_duration_problem(
+                recorded_trial.trial_identity, recorded_trial.answer_duration_seconds
+            )
+            for recorded_trial in regrade_request.recorded_trials
+            if recorded_trial.answer_duration_seconds is not None and not 0 <= recorded_trial.answer_duration_seconds < math.inf
+        ]
+
+    @staticmethod
+    def _describe_recorded_answer_duration_problem(trial_identity: TrialIdentity, answer_duration_seconds: float) -> str:
+        trial_label: str = f"trial {trial_identity.variant_name} / {trial_identity.case_name} / run {trial_identity.repetition_number}"
+        return f"{trial_label} has a recorded answer time of {answer_duration_seconds} (expected a finite number of seconds of zero or more)"
 
     @staticmethod
     def _find_undefined_variant_names(regrade_request: RegradeRequest, eval_suite: EvalSuite) -> list[str]:

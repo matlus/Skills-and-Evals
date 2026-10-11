@@ -3,11 +3,18 @@ from decimal import ROUND_FLOOR, Decimal
 from itertools import groupby
 from typing import Final, final
 
-from prompt_evals.managers.models.scorecard_models import FailureCause, Scorecard, ScorecardRow
+from prompt_evals.managers.models.scorecard_models import DurationSummary, FailureCause, Scorecard, ScorecardRow, VariantTiming
 
 GATE_MET_MARK: Final[str] = "✅"
 GATE_MISSED_MARK: Final[str] = "❌"
 PERCENTAGE_PER_RATE: Final[Decimal] = Decimal(100)
+SECONDS_PER_MINUTE: Final[int] = 60
+SECONDS_PER_HOUR: Final[int] = 3600
+# Below this many seconds a time is shown to a tenth of a second; above it, a tenth is noise.
+TENTHS_SHOWN_BELOW_SECONDS: Final[float] = 10.0
+NOT_RECORDED_TEXT: Final[str] = "not recorded"
+RANGE_SEPARATOR: Final[str] = " to "
+GATED_VARIANT_LABEL: Final[str] = " (gated)"
 
 
 @final
@@ -24,6 +31,7 @@ class ScorecardReportRenderingProcessor:
         report_lines: list[str] = [
             *ScorecardReportRenderingProcessor._render_heading(scorecard),
             *ScorecardReportRenderingProcessor._render_table(rows_per_check),
+            *ScorecardReportRenderingProcessor._render_timing(scorecard.scorecard_timing.variant_timings),
             *ScorecardReportRenderingProcessor._render_descriptions(rows_per_check),
             *ScorecardReportRenderingProcessor._render_failure_causes(scorecard.failure_causes),
             *ScorecardReportRenderingProcessor._render_failures(scorecard),
@@ -62,7 +70,7 @@ class ScorecardReportRenderingProcessor:
             return ["No checks were graded."]
         variant_headings: list[str] = [
             ScorecardReportRenderingProcessor._escape_table_cell(
-                f"{scorecard_row.variant_name} (gated)" if scorecard_row.is_gated else scorecard_row.variant_name
+                f"{scorecard_row.variant_name}{GATED_VARIANT_LABEL}" if scorecard_row.is_gated else scorecard_row.variant_name
             )
             for scorecard_row in rows_per_check[0]
         ]
@@ -81,6 +89,68 @@ class ScorecardReportRenderingProcessor:
             *(ScorecardReportRenderingProcessor._render_cell(check_row) for check_row in check_rows),
         ]
         return "| " + " | ".join(table_cells) + " |"
+
+    @staticmethod
+    def _render_timing(variant_timings: Sequence[VariantTiming]) -> list[str]:
+        if not variant_timings:
+            return []
+        return [
+            "",
+            "## Time per run",
+            "",
+            (
+                "Answer time is the coding-assistant session that produced the answer, before any grading started. Grading time is "
+                "the eval analysis of that answer: reading its facts, every judge, and the code checks. Total time is the two added "
+                "together. Each cell is the median across runs, then the shortest to the longest run. Runs execute concurrently, "
+                "so the whole evaluation takes less time than the runs added together. Runs whose session failed are left out of these "
+                "times, and so are runs recorded before answer times were saved; a cell then says how many runs it covers."
+            ),
+            "",
+            "| Variant | Runs | Answer time (model session) | Grading time (eval analysis) | Total time |",
+            "|---|---|---|---|---|",
+            *(ScorecardReportRenderingProcessor._render_timing_line(variant_timing) for variant_timing in variant_timings),
+        ]
+
+    @staticmethod
+    def _render_timing_line(variant_timing: VariantTiming) -> str:
+        variant_heading: str = f"{variant_timing.variant_name}{GATED_VARIANT_LABEL}" if variant_timing.is_gated else variant_timing.variant_name
+        table_cells: list[str] = [
+            ScorecardReportRenderingProcessor._escape_table_cell(variant_heading),
+            str(variant_timing.trial_count),
+            *(
+                ScorecardReportRenderingProcessor._render_duration_summary(duration_summary, variant_timing.trial_count)
+                for duration_summary in (
+                    variant_timing.answer_duration_summary,
+                    variant_timing.grading_duration_summary,
+                    variant_timing.total_duration_summary,
+                )
+            ),
+        ]
+        return "| " + " | ".join(table_cells) + " |"
+
+    @staticmethod
+    def _render_duration_summary(duration_summary: DurationSummary | None, trial_count: int) -> str:
+        if duration_summary is None:
+            return NOT_RECORDED_TEXT
+        summary_text: str = (
+            f"{ScorecardReportRenderingProcessor._format_duration(duration_summary.median_seconds)} "
+            f"({ScorecardReportRenderingProcessor._format_duration(duration_summary.minimum_seconds)}{RANGE_SEPARATOR}"
+            f"{ScorecardReportRenderingProcessor._format_duration(duration_summary.maximum_seconds)})"
+        )
+        if duration_summary.measured_trial_count < trial_count:
+            summary_text += f", {duration_summary.measured_trial_count} of {trial_count} runs"
+        return summary_text
+
+    @staticmethod
+    def _format_duration(duration_seconds: float) -> str:
+        if duration_seconds < TENTHS_SHOWN_BELOW_SECONDS:
+            return f"{duration_seconds:.1f}s"
+        whole_seconds: int = round(duration_seconds)
+        if whole_seconds < SECONDS_PER_MINUTE:
+            return f"{whole_seconds}s"
+        if whole_seconds < SECONDS_PER_HOUR:
+            return f"{whole_seconds // SECONDS_PER_MINUTE}m {whole_seconds % SECONDS_PER_MINUTE:02d}s"
+        return f"{whole_seconds // SECONDS_PER_HOUR}h {whole_seconds % SECONDS_PER_HOUR // SECONDS_PER_MINUTE:02d}m"
 
     @staticmethod
     def _render_descriptions(rows_per_check: Iterable[Sequence[ScorecardRow]]) -> list[str]:

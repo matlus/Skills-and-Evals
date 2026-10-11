@@ -179,18 +179,29 @@ The loader proves the ledger and `expected_facts.json` agree under every accepte
 results/
   pwi/expense_analysis/            runs of the PWI library (the command and the pytest gate)
     <timestamp>-<label>-<assistant>-<model>-<effort>-<id>/
-      scorecard.md                 the report: pass-rate table, check descriptions, failure causes, every failing run
-      scorecard.json               the same data as JSON
+      scorecard.md                 the report: pass-rate table, time per run, check descriptions, failure causes, every failing run
+      scorecard.json               the same data as JSON, including every run's times
       regraded_from.txt            for a regrade: the run whose recorded trials were graded again
       trials/<variant>/<case>/run-NN/
         answer.md                  the model's final answer
         event_stream.jsonl         the raw session: every message, tool call and tool result
-        grade.json                 extracted facts, every check outcome with its reason, and traced diagnoses
+        timing.json                how long the session took to produce the answer
+        grade.json                 extracted facts, every check outcome with its reason, traced diagnoses, and grading time
+    scorecard_comparison.md        written by prompt_evals_compare: the newest run of every configuration in one table
   minimal/expense_analysis/        runs of the one-file eval (none kept yet)
 ```
 
 Start with `scorecard.md`, then open `answer.md` for any failing run it names. `event_stream.jsonl` shows exactly
 what the model did, including the Python it ran.
+
+`scorecard.md` also has a **Time per run** table with three columns for each prompt variant:
+
+- **Answer time (model session)**: the coding-assistant session that produced the answer, before any grading started.
+- **Grading time (eval analysis)**: reading the answer's facts, every judge, and the code checks.
+- **Total time**: the two added together.
+
+Each cell is the median across runs, then the shortest to the longest run. Trials run concurrently, so the whole
+evaluation takes less time than the runs added together.
 
 Every folder here is a **regrade** (`-regrade-` in its name): the trials were recorded once, on 2026-10-08 and
 2026-10-09, and graded again on 2026-10-10 against the current reference key, without running the models again. Older
@@ -217,6 +228,10 @@ user name in temporary paths is replaced with `<user>`.
 The last two hold Opus's first `robust-tables-first` runs, recorded while that prompt was still being refined; three of
 those five runs pass `three-supported-findings`. The comparison table above uses the later five.
 
+These runs were recorded before answer times were saved, so their scorecards have no times. Regrading a Claude Code run
+recovers its answer times from the duration Claude Code writes into its event stream; a Codex event stream holds no
+duration, so Codex answer times need a new run.
+
 ## Running the evals yourself
 
 ### Prerequisites
@@ -236,7 +251,7 @@ uv sync --all-packages --all-groups --cache-dir .\.uv-cache
 uv run --cache-dir .\.uv-cache pytest -q
 ```
 
-The 115 harness tests run in seconds and call no model.
+The 134 harness tests run in seconds and call no model.
 
 ### Run the eval
 
@@ -284,9 +299,17 @@ Runs recorded before the scorecard named its assistant need `--assistant codex` 
 
 ### Compare a new model
 
-Run the gated variant on the new model, then compare its `scorecard.md` with the ones here. If a check drops below its
-minimum, start with the scorecard's **Failure causes**, then read the failing answers. Fix the prompt, or, if the
-cause is a reasonable choice the key rejects, the key.
+Run the gated variant on the new model, then build the comparison table from every run folder's `scorecard.json`:
+
+```powershell
+uv run --cache-dir .\.uv-cache prompt_evals_compare results\pwi\expense_analysis
+```
+
+It writes `scorecard_comparison.md` into that folder: one row per assistant, model, effort and prompt variant, with the
+gate, the checks below their minimum, and the answer, grading and total times. When a configuration ran more than once,
+only its newest run folder is shown. If a check drops below its minimum, start with that run's **Failure causes** in
+`scorecard.md`, then read the failing answers. Fix the prompt, or, if the cause is a reasonable choice the key rejects,
+the key.
 
 ### Settings
 

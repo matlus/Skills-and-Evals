@@ -54,6 +54,7 @@ def create_trial_identity(variant_name: str, repetition_number: int) -> TrialIde
 def record_claude_trial(trial_identity: TrialIdentity, answer_text: str) -> RecordedCompletedTrial:
     # A recorded trial is the event stream the Claude Code CLI printed when the trial ran, here one that ran Python.
     return RecordedCompletedTrial(
+        answer_duration_seconds=None,
         trial_identity=trial_identity,
         event_stream_text=ClaudeEventStreamBuilder.build_event_stream(
             f"model-{RandomDataGenerator.create_random_word()}",
@@ -170,6 +171,7 @@ class TestRegradeEvaluationExpectedPaths:
         sample_eval_suite: SampleEvalSuite = SampleEvalSuiteBuilder.write_sample_eval_suite(tmp_path)
         recorded_trials: tuple[RecordedTrial, ...] = tuple(
             RecordedCompletedTrial(
+                answer_duration_seconds=None,
                 trial_identity=create_trial_identity(CANDIDATE_VARIANT_NAME, repetition_number),
                 event_stream_text=CodexEventStreamBuilder.build_event_stream(
                     ScriptedEventStreamSession(
@@ -208,9 +210,15 @@ class TestRegradeEvaluationFailurePaths:
         recorded_error_description: str = RandomDataGenerator.create_random_sentence()
         recorded_trials: tuple[RecordedTrial, ...] = (
             record_claude_trial(create_trial_identity(CANDIDATE_VARIANT_NAME, 1), create_answer_text()),
-            RecordedErroredTrial(trial_identity=create_trial_identity(CANDIDATE_VARIANT_NAME, 2), error_description=recorded_error_description),
+            RecordedErroredTrial(
+                trial_identity=create_trial_identity(CANDIDATE_VARIANT_NAME, 2),
+                error_description=recorded_error_description,
+                answer_duration_seconds=None,
+            ),
             RecordedCompletedTrial(
-                trial_identity=create_trial_identity(CANDIDATE_VARIANT_NAME, 3), event_stream_text=RandomDataGenerator.create_random_sentence()
+                trial_identity=create_trial_identity(CANDIDATE_VARIANT_NAME, 3),
+                event_stream_text=RandomDataGenerator.create_random_sentence(),
+                answer_duration_seconds=None,
             ),
         )
         test_mediator_coding_assistant_cli: TestMediatorCodingAssistantCli = TestMediatorCodingAssistantCli()

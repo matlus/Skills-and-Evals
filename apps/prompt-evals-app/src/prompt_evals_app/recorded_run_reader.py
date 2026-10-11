@@ -1,4 +1,5 @@
 import json
+import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,11 +12,14 @@ SCORECARD_FILE_NAME: Final[str] = "scorecard.json"
 TRIALS_DIRECTORY_NAME: Final[str] = "trials"
 EVENT_STREAM_FILE_NAME: Final[str] = "event_stream.jsonl"
 ERROR_FILE_NAME: Final[str] = "error.txt"
+TIMING_FILE_NAME: Final[str] = "timing.json"
+ANSWER_DURATION_FIELD_NAME: Final[str] = "answer_duration_seconds"
 RUN_DIRECTORY_PATTERN: Final[re.Pattern[str]] = re.compile(r"^run-(\d+)$")
 
 type JsonObject = dict[str, object]
 
 
+@final
 class RecordedRunUnreadableError(Exception):
     """The folder is not a run directory this app wrote, so it cannot be regraded."""
 
@@ -128,11 +132,56 @@ class RecordedRunReader:
     def _read_recorded_trial(trial_directory: Path, trial_identity: TrialIdentity) -> RecordedTrial:
         event_stream_path: Path = trial_directory / EVENT_STREAM_FILE_NAME
         if event_stream_path.is_file():
-            return RecordedCompletedTrial(trial_identity=trial_identity, event_stream_text=RecordedRunReader._read_text_file(event_stream_path))
+            return RecordedCompletedTrial(
+                trial_identity=trial_identity,
+                event_stream_text=RecordedRunReader._read_text_file(event_stream_path),
+                answer_duration_seconds=RecordedRunReader._read_answer_duration(trial_directory / TIMING_FILE_NAME),
+            )
         error_path: Path = trial_directory / ERROR_FILE_NAME
         if error_path.is_file():
-            return RecordedErroredTrial(trial_identity=trial_identity, error_description=RecordedRunReader._read_text_file(error_path))
+            return RecordedErroredTrial(
+                trial_identity=trial_identity,
+                error_description=RecordedRunReader._read_text_file(error_path),
+                answer_duration_seconds=RecordedRunReader._read_answer_duration(trial_directory / TIMING_FILE_NAME),
+            )
         raise RecordedRunUnreadableError(f"{trial_directory} holds neither {EVENT_STREAM_FILE_NAME} nor {ERROR_FILE_NAME}")
+
+    @staticmethod
+    def _read_answer_duration(timing_path: Path) -> float | None:
+        # Runs recorded before answer times were saved have no timing.json; their answer time is unknown, not zero.
+        if not timing_path.is_file():
+            return None
+        return RecordedRunReader._parse_answer_duration(RecordedRunReader._read_text_file(timing_path), timing_path)
+
+    @staticmethod
+    def _parse_answer_duration(timing_text: str, timing_path: Path) -> float | None:
+        try:
+            timing_document: object = json.loads(timing_text)
+        except json.JSONDecodeError as invalid_timing:
+            raise RecordedRunUnreadableError(f"{timing_path} cannot be read: {invalid_timing}") from invalid_timing
+        if not isinstance(timing_document, dict):
+            raise RecordedRunUnreadableError(f"{timing_path} does not hold a JSON object")
+        return RecordedRunReader._validate_answer_duration(cast(JsonObject, timing_document).get(ANSWER_DURATION_FIELD_NAME), timing_path)
+
+    @staticmethod
+    def _validate_answer_duration(answer_duration_value: object, timing_path: Path) -> float | None:
+        if answer_duration_value is None:
+            return None
+        unreadable_message: str = (
+            f"{timing_path} must hold a finite number of seconds of zero or more, or null, for {ANSWER_DURATION_FIELD_NAME}; "
+            f"it holds {answer_duration_value!r}"
+        )
+        # bool is a subclass of int, so true would otherwise read as one second.
+        if isinstance(answer_duration_value, bool) or not isinstance(answer_duration_value, int | float):
+            raise RecordedRunUnreadableError(unreadable_message)
+        try:
+            answer_duration_seconds: float = float(answer_duration_value)
+        except OverflowError as too_large_value:
+            raise RecordedRunUnreadableError(unreadable_message) from too_large_value
+        # json.loads reads NaN and Infinity; NaN fails the comparison.
+        if not 0 <= answer_duration_seconds < math.inf:
+            raise RecordedRunUnreadableError(unreadable_message)
+        return answer_duration_seconds
 
     @staticmethod
     def _read_text_file(file_path: Path) -> str:

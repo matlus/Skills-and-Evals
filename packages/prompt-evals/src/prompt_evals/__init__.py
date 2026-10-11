@@ -23,7 +23,15 @@ from prompt_evals.managers.exceptions.scorecard_exceptions import ScorecardValid
 from prompt_evals.managers.models.artifact_models import EvaluationArtifact, EvaluationArtifactCallback, EvaluationArtifactType
 from prompt_evals.managers.models.evaluation_models import CodingAssistant, EffortLevel, EvaluationRequest
 from prompt_evals.managers.models.regrade_models import RecordedCompletedTrial, RecordedErroredTrial, RecordedTrial, RegradeRequest
-from prompt_evals.managers.models.scorecard_models import FailureCause, Scorecard, ScorecardRow
+from prompt_evals.managers.models.scorecard_models import (
+    DurationSummary,
+    FailureCause,
+    Scorecard,
+    ScorecardRow,
+    ScorecardTiming,
+    TrialTiming,
+    VariantTiming,
+)
 from prompt_evals.managers.models.trial_models import TrialIdentity
 
 __all__ = [
@@ -32,6 +40,7 @@ __all__ = [
     "ConfigurationSettingException",
     "ContextualDataDict",
     "DomainFacade",
+    "DurationSummary",
     "EffortLevel",
     "EvalSuiteDefinitionInvalidException",
     "EvalSuiteNotFoundException",
@@ -56,6 +65,9 @@ __all__ = [
     "RegradeRequest",
     "Scorecard",
     "ScorecardRow",
+    "ScorecardTiming",
     "ScorecardValidationException",
     "TrialIdentity",
+    "TrialTiming",
+    "VariantTiming",
 ]
