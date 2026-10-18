@@ -11,6 +11,11 @@ three prompt versions and six models from two vendors, and it keeps every answer
 The article [Verified, Not Trusted: Expense Analysis, Part Three](https://matlus.com/writing/verified-not-trusted-expense-analysis-part-three/)
 explains why prompts and skills need evals, walks through how this eval is built, and discusses these results.
 
+[Verified, Not Trusted: Designing Evals for AI Applications](https://matlus.com/writing/verified-not-trusted-designing-evals/)
+teaches how to design evals as functional acceptance tests at the system boundary, choose deterministic graders,
+write grading rubrics, and report results with the provider, model and reasoning effort. It uses this implementation
+as a worked example and applies the same verification discipline to published skills.
+
 - [Results at a glance](#results-at-a-glance)
 - [What is being evaluated](#what-is-being-evaluated)
 - [Test vs. eval](#test-vs-eval)
